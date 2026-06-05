@@ -1,0 +1,6 @@
+key: visualtime
+name: VisualTime
+default_environment: qa
+
+environments:
+  - key: qa

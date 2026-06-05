@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ingresar</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+  <link rel="stylesheet" href="/app/dashboard.css?v=20260519-7" />
+</head>
+<body class="login-shell">
+  <main class="login-page">
+    <section class="login-card" aria-label="Inicio de sesion">
+      <div class="login-brand">
+        <span class="login-mark">QA</span>
+        <div>
+          <strong>QA Doc Analyzer</strong>
+          <span>Portal interno</span>
+        </div>
+      </div>
+
+      <div class="login-head">
+        <h1>Ingresar</h1>
+      </div>
+
+      <form id="loginForm" class="login-form" autocomplete="off">
+        <label>
+          <span>Usuario</span>
+          <input id="username" name="qa_user" type="text" autocomplete="off" required />
+        </label>
+        <label>
+          <span>Contraseña</span>
+          <input id="password" name="qa_pass" type="password" autocomplete="new-password" required />
+        </label>
+        <button id="btnLogin" type="submit">Entrar</button>
+        <div id="loginError" class="field-error" role="alert"></div>
+      </form>
+    </section>
+  </main>
+  <script type="module" src="/app/js/login.js"></script>
+</body>
+</html>

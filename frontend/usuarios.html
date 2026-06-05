@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Usuarios y Roles</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+  <link rel="stylesheet" href="/app/dashboard.css?v=20260521-1" />
+</head>
+<body class="module-page users-page">
+  <div class="container wide module-container">
+    <div class="page-head users-head">
+      <div>
+        <h1>Usuarios y Roles</h1>
+        <p class="small muted">Alta, edicion y control de accesos por perfil.</p>
+      </div>
+      <button id="btnOpenCreate" type="button">Crear usuario</button>
+    </div>
+
+    <section class="panel-block module-panel users-manager">
+      <div class="users-toolbar">
+        <div>
+          <h2>Listado de usuarios</h2>
+          <p id="usersCount" class="small muted">Cargando usuarios...</p>
+        </div>
+        <div class="users-tools">
+          <label class="search-field">
+            <span>Buscar</span>
+            <input id="userSearch" type="text" placeholder="Buscar por nombre o usuario" autocomplete="off" />
+          </label>
+          <button id="btnReload" type="button" class="btn-secondary">Actualizar</button>
+        </div>
+      </div>
+
+      <div id="usersBox" class="users-list small muted">Cargando usuarios...</div>
+    </section>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from '/app/js/auth.js';
+    requireAuth(['lider']);
+  </script>
+  <script type="module" src="/app/js/usuarios.js?v=20260521-1"></script>
+</body>
+</html>

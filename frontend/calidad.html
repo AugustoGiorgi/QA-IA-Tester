@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Validación de Calidad</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+  <style>
+    /* ===== Overrides locales para que los botones calcen con Entendimiento ===== */
+    .btn { 
+      background:#2563eb; color:#fff; border:0; cursor:pointer;
+      padding:8px 14px; border-radius:10px; font-weight:600; 
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .btn-secondary { background:#334155; }
+
+    .button-row { display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; }
+
+    /* Header con puntaje (afuera del recuadro) */
+    .score-hero{
+      display:flex; align-items:flex-end; justify-content:space-between; gap:12px;
+      margin-bottom:12px;
+    }
+    .score-hero .big { font-size:2.4rem; line-height:1; }
+    .muted{ opacity:.85; }
+
+    /* Subheader y KPIs (adentro del recuadro .output) */
+    .subpanel-head{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px; flex-wrap:wrap; margin-bottom:10px;
+    }
+    .kpis { display:flex; gap:8px; flex-wrap:wrap; }
+    .kpi { padding:6px 10px; border:1px solid #1f2937;
+           border-radius:999px; font-size:.85rem; background:rgba(255,255,255,.04); }
+
+    /* Tabla */
+    table.compact { width:100%; border-collapse: collapse; }
+    table.compact thead th {
+      text-align:left; font-weight:600; font-size:.92rem; color:#9CA3AF; padding:8px 10px;
+      border-bottom:1px solid #1f2937;
+    }
+    table.compact tbody td { padding:10px; border-bottom:1px solid #1f2937; }
+    tr.clickable { cursor:pointer; }
+    tr.clickable:hover { background: rgba(255,255,255,0.02); }
+    .name-cell { display:flex; align-items:center; gap:8px; }
+    .chev { opacity:.7; }
+
+    /* Pills de estado */
+    .pill{
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 10px; border:1px solid #1f2937; border-radius:999px;
+      font-size:.82rem; background:rgba(255,255,255,.03);
+    }
+    .ok{color:#21c465}.warn{color:#ff9d3f}.bad{color:#ff5d5d}
+
+    /* Chat */
+    .chat { display:flex; flex-direction:column; gap:10px; }
+    .chat-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .chat-box {
+      border:1px solid #1f2937; border-radius:12px;
+      background:#0b1220;
+      padding:10px; max-height:320px; overflow:auto;
+    }
+    .msg { padding:6px 8px; margin:4px 0; border-radius:8px; }
+    .msg .b { font-weight:600; margin-bottom:2px;}
+    .msg.user { background:rgba(59,130,246,.07) }
+    .msg.user .b { color:#93c5fd }
+    .msg.bot { background:rgba(34,197,94,.07) }
+    .msg.bot .b { color:#86efac }
+    .chat-form { display:flex; gap:8px; }
+    .chat-form input[type="text"] { flex:1 1 auto; }
+    .small.muted code { background: rgba(255,255,255,.06); border:1px solid #1f2937; padding:1px 6px; border-radius:6px; }
+    .output { background:#111827; border-radius:12px; border:1px solid #1f2937; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Validación de Calidad — Funcional</h1>
+
+    <!-- Input arriba; botones debajo, compactos como Entendimiento -->
+    <form id="form" class="panel" style="margin-bottom:12px">
+      <label for="file">Archivo (.docx)</label>
+      <input id="file" type="file" accept=".docx" />
+      <div class="button-row">
+        <button type="submit" class="btn">Procesar</button>
+        <button type="button" id="btnBack" class="btn">← Volver</button>
+      </div>
+    </form>
+
+    <!-- Header de puntaje y descarga (afuera del recuadro negro) -->
+    <div id="result"></div>
+
+    <!-- Chat oculto por defecto: solo se muestra si /start OK y sin mensajes iniciales -->
+    <div id="recoChat" class="panel" style="display:none"></div>
+
+    <!-- Acciones para migrar -->
+    <div id="migrate" class="migrate"></div>
+  </div>
+
+  <script>
+    // “← Volver” como botón
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('btnBack')?.addEventListener('click', () => {
+        location.href = '/app/index.html';
+      });
+    });
+  </script>
+  <script type="module">
+    import { requireAuth } from '/app/js/auth.js';
+    requireAuth(['funcional', 'lider']);
+  </script>
+  <script type="module" src="/app/js/calidad.js"></script>
+</body>
+</html>

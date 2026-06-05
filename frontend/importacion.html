@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Importación de Datos</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+  <link rel="stylesheet" href="/app/dashboard.css?v=20260519-7" />
+</head>
+<body class="module-page import-page">
+  <div class="container wide module-container">
+    <div class="page-head">
+      <div>
+        <h1>Importación de Datos</h1>
+        <p class="small muted">Sincronización masiva con MongoDB mediante CSV o Excel.</p>
+      </div>
+    </div>
+
+    <form id="importForm" class="module-grid import-grid" autocomplete="off">
+      <section class="panel-block module-panel">
+        <h2>Archivo</h2>
+        <label id="dropzone" class="dropzone" for="file">
+          <input id="file" type="file" accept=".csv,.xlsx" />
+          <span class="drop-icon">↑</span>
+          <strong>Arrastra un CSV/XLSX o selecciona un archivo</strong>
+          <span id="fileName" class="small muted">Formatos permitidos: .csv y .xlsx</span>
+        </label>
+        <div id="fileError" class="field-error"></div>
+      </section>
+
+      <section class="panel-block module-panel">
+        <h2>Configuración</h2>
+        <div class="form-grid">
+          <label>
+            Colección MongoDB
+            <input id="collection" type="text" placeholder="Projects" required />
+          </label>
+          <label>
+            Campo único
+            <input id="uniqueKey" type="text" placeholder="_id o project_id" required />
+          </label>
+          <label>
+            Campos requeridos
+            <input id="requiredFields" type="text" placeholder="name, area, fecha_fin" />
+          </label>
+          <label>
+            Tipos de datos
+            <input id="fieldTypes" type="text" placeholder='{"progreso":"float","fecha_fin":"date"}' />
+          </label>
+        </div>
+        <div class="small muted">Los campos no enviados no borran información existente. El campo único siempre se valida como requerido.</div>
+      </section>
+
+      <section class="panel-block module-panel actions-panel">
+        <button id="submitBtn" type="submit">Importar datos</button>
+        <button id="resetBtn" type="button" class="btn-secondary">Limpiar</button>
+      </section>
+    </form>
+
+    <section id="statusPanel" class="panel-block module-panel status-panel hidden"></section>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from '/app/js/auth.js';
+    requireAuth(['lider']);
+  </script>
+  <script type="module" src="/app/js/importacion.js"></script>
+</body>
+</html>

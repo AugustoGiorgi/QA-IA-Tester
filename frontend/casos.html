@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Diseño de Casos de Prueba</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Diseño de Casos de Prueba</h1>
+    <form id="form">
+      <input type="file" id="file" accept=".docx" required />
+      <button type="submit">Generar Excel</button>
+      <button type="button" onclick="location.href='/app/index.html'">← Volver</button>
+    </form>
+    <div id="result" class="small"></div>
+
+    <!-- NUEVO: bloque de migración -->
+    <div id="migrate" class="migrate"></div>
+  </div>
+  <script type="module">
+    import { requireAuth } from '/app/js/auth.js';
+    requireAuth(['qa']);
+  </script>
+  <script type="module" src="/app/js/casos.js"></script>
+</body>
+</html>

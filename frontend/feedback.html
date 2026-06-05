@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Retroalimentación</title>
+    <link rel="stylesheet" href="/app/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Retroalimentación</h1>
+
+      <form id="form">
+        <label>Archivo ajustado (.xlsx)</label>
+        <input type="file" id="file" accept=".xlsx" required />
+
+        <label>Documento de origen (opcional)</label>
+        <input
+          type="text"
+          id="source"
+          placeholder="Nombre del doc funcional"
+        />
+
+        <label>Notas para el aprendizaje (opcional)</label>
+        <textarea
+          id="notes"
+          placeholder="Qué cambiaste y por qué"
+        ></textarea>
+
+        <button type="submit">Subir</button>
+        <button type="button" onclick="location.href='/app/index.html'">
+          ← Volver
+        </button>
+      </form>
+
+      <h3>Histórico</h3>
+      <div id="list"></div>
+    </div>
+
+    <script type="module" src="/app/js/feedback.js"></script>
+  </body>
+</html>

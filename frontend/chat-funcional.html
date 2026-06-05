@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Asistente de Documento Funcional</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+  <link rel="stylesheet" href="/app/dashboard.css?v=20260519-7"/>
+  <style>
+    .chat-wrap { border:1px solid #334155; border-radius:12px; background:#0b1220; padding:12px; }
+    .chat-log { height:360px; overflow:auto; padding:8px; }
+    .msg { padding:8px 10px; border-radius:10px; margin:8px 0; white-space:pre-wrap; }
+    .assistant { background:#0f172a; color:#e5e7eb; }
+    .user { background:#1e293b; color:#e5e7eb; align-self:flex-end; }
+    .row { display:flex; gap:8px; margin-top:10px; }
+    .row input { flex:1; }
+    .bar { display:flex; gap:8px; flex-wrap:wrap; }
+    .pill { font-size:12px; padding:6px 10px; border:1px solid #334155; border-radius:999px; background:#0f172a; color:#e5e7eb; }
+    .small { opacity:.8; }
+
+    /* 🎤 estilos del mic */
+    #btn-mic { padding: 8px 10px; border-radius: 10px; border: 1px solid #334155; background:#0f172a; color:#e5e7eb; }
+    #btn-mic.recording { background:#b91c1c; }
+  </style>
+</head>
+<body class="module-page chat-page">
+  <div class="container module-container">
+    <h1>Asistente de Documento Funcional</h1>
+    <p class="small">Flujo guiado por secciones con ida y vuelta.</p>
+
+    <div class="bar" style="margin:10px 0;">
+      <button id="btn-start">Empezar chat</button>
+      <button id="btn-finish-no" disabled>Finalizar sin generar</button>
+      <button id="btn-finish-yes" disabled>Finalizar y generar DOCX</button>
+      <button onclick="location.href='/app/index.html'">← Volver</button>
+    </div>
+
+    <div class="pill">Secciones: Situación actual → Objetivos → Alcance → Actores → Flujos → Integraciones → NFR → Criterios → Restricciones</div>
+
+    <div class="chat-wrap" style="margin-top:12px;">
+      <div id="chat" class="chat-log"></div>
+      <div class="row">
+        <input id="input" type="text" placeholder="Escribí tu respuesta..."/>
+        <!-- 🎤 botón de dictado -->
+        <button id="btn-mic" title="Dictar (voz → texto)">🎤</button>
+        <button id="btn-send" disabled>Enviar</button>
+        <button id="btn-ok" disabled>OK sección</button>
+        <button id="btn-change" disabled>Pedir cambios</button>
+      </div>
+      <!-- estado del mic (muestra “Escuchando…”) -->
+      <span id="mic-status" class="small" style="min-height:18px; display:inline-block; margin-top:6px;"></span>
+
+      <div class="small" style="margin-top:6px;">
+        Estados: <b>Escribir</b> → preguntas → <b>Propuesta final</b> → OK / Cambios.
+      </div>
+    </div>
+
+    <div id="result" style="margin-top:14px;"></div>
+  </div>
+
+  <script type="module" src="/app/js/chat-funcional.js"></script>
+</body>
+</html>

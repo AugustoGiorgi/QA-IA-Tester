@@ -1,0 +1,97 @@
+key: emitir_poliza
+title: Emitir póliza
+version: 1.0.0
+tags: [polizas, alta]
+
+preconditions:
+  - login
+
+variables:
+  # Ambiente y credenciales (los carga el QA por caso)
+  - { name: base_url, type: string, required: true, example: "http://172.16.70.172/dropthings" }
+  - { name: user, type: string, required: true, example: "admin" }
+  - { name: pass, type: string, required: true, example: "admin123" }
+
+  # Datos propios del proceso
+  - { name: fecha_vigencia, type: string, required: true, example: "01/10/2025" }
+  - { name: sucursal, type: string, required: false, default: "Casa Central", example: "Casa Central" }
+  - { name: oficina, type: string, required: true, example: "1" }
+  - { name: agencia, type: string, required: true, example: "2" }
+  - { name: ramo, type: string, required: true, example: "Integral Comercio e Industria" }
+  - { name: producto, type: string, required: true, example: "10190" }
+  - { name: via_pago, type: string, required: true, example: "Tarjeta de crédito" }
+  - { name: titular, type: string, required: true, example: "12345" }
+  - { name: codigo_contratante, type: string, required: true, example: "C-001" }
+  - { name: convenio, type: string, required: true, example: "3 - Mastercard" }
+  - { name: cuotificar, type: boolean, required: false, default: true, example: true }
+  - { name: codigo_modulo, type: string, required: true, example: "1" }
+
+asserts: []
+
+examples:
+  - name: smoke_ok
+    data:
+      base_url: "http://172.16.70.172/dropthings"
+      user: "admin"
+      pass: "admin123"
+      fecha_vigencia: "01/10/2025"
+      sucursal: "Casa Central"
+      oficina: "1"
+      agencia: "2"
+      ramo: "Integral Comercio e Industria"
+      producto: "10190"
+      via_pago: "Tarjeta de crédito"
+      titular: "12345"
+      codigo_contratante: "C-001"
+      convenio: "3 - Mastercard"
+      cuotificar: true
+      codigo_modulo: "1"
+
+template_dsl: |
+  # Home + Login
+  NAV path="/"
+  CLICK sel=@botonAbrirLogin
+  TYPE sel=@inputUsuario value=${user}
+  TYPE sel=@inputPassword value=${pass}
+  CLICK sel=@botonIngresar
+
+  # Ir a CA001
+  TYPE sel=@inputBuscadorCA value="CA001"
+  CLICK sel=@opcionCA001
+  CLICK sel=@botonIngresarCA001
+
+  # Datos de cabecera
+  TYPE sel=@inputFechaVigencia value=${fecha_vigencia}
+  SELECT sel=@comboSucursal option="${sucursal}"
+  TYPE sel=@inputOficina value=${oficina}
+  TYPE sel=@inputAgencia value=${agencia}
+  SELECT sel=@comboRamo option="${ramo}"
+  TYPE sel=@inputProducto value=${producto}
+
+  CLICK sel=@botonContinuar1
+  CLICK sel=@tabClientes
+
+  # Contratante
+  CLICK sel=@linkContratante
+  TYPE sel=@inputCodigoCliente value=${codigo_contratante}
+  CLICK sel=@botonPopupAceptarContratante
+
+  CLICK sel=@botonContinuar2
+  CLICK sel=@tabFacturacion
+
+  # Facturación
+  CLICK sel=@chkCuotificar
+  TYPE sel=@inputTitular value=${titular}
+  SELECT sel=@comboViaPago option="${via_pago}"
+  CLICK sel=@chkPoliza
+  TYPE sel=@inputConvenio value=${convenio}
+  CLICK sel=@botonContinuar3
+
+  # Módulo
+  CLICK sel=@tabModulo
+  CLICK sel=@botonAbrirSelectorModulo
+  TYPE sel=@inputCodigoModulo value=${codigo_modulo}
+  CLICK sel=@botonPopupAceptarModulo
+
+  CLICK sel=@botonContinuar4
+  CLICK sel=@tabCoberturas

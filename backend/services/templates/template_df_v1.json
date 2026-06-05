@@ -1,0 +1,35 @@
+{
+  "version": "template_df_v3",
+  "weights": {
+    "situacion_actual": 9,
+    "objetivo": 9,
+    "funcionalidades": 35,
+    "configuraciones": 7,
+    "riesgos": 7,
+    "sistemas_impactados": 7,
+    "fuera_alcance": 7,
+    "casos_prueba": 14,
+    "comentarios_tecnicos": 5
+  },
+  "required_sections": [
+    "Situación Actual",
+    "Objetivo",
+    "Funcionalidades Afectadas",
+    "Configuraciones",
+    "Riesgos",
+    "Sistemas impactados",
+    "Fuera de Alcance",
+    "Casos de Pruebas",
+    "Comentarios técnicos"
+  ],
+  "metadata_fields": [],
+  "funcionalidad_rules": {
+    "must_mark_tipo": true,
+    "must_reference_transaccion_vt_if_ajuste": true,
+    "require_image_or_detailed_screen_spec": true,
+    "field_specs_keywords": ["obligatorio", "optativo", "valores posibles", "mínimo", "máximo"],
+    "validations_require_error_message": true,
+    "min_field_spec_coverage_ratio": 0.8
+  },
+  "cases_table_required_columns": []
+}

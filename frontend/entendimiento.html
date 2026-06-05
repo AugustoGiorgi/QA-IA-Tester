@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Entendimiento de Documento</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+  <style>
+    /* ====== Mejora de legibilidad (tema oscuro) ====== */
+    :root{
+      --chat-bg: #0b1220;          /* fondo del panel */
+      --chat-border: #334155;      /* borde */
+      --chat-fg: #e5e7eb;          /* texto normal */
+      --chat-fg-strong:#f8fafc;    /* texto fuerte/títulos */
+      --bubble-user: #1e3a8a;      /* azul oscuro */
+      --bubble-assistant:#1f2937;  /* gris muy oscuro */
+      --placeholder:#94a3b8;       /* placeholder input */
+      --btn-bg:#2563eb;            /* botón enviar */
+    }
+
+    /* Caja del chat */
+    #chatbox { margin-top: 16px; }
+    #chatbox h3 { 
+      font-size: 1.125rem; 
+      margin-bottom: 8px; 
+      color: var(--chat-fg-strong);
+      font-weight: 600;
+    }
+
+    /* Panel de mensajes */
+    .chat-log { 
+      border: 1px solid var(--chat-border); 
+      border-radius: 10px; 
+      padding: 12px; 
+      height: 260px; 
+      overflow: auto; 
+      background: var(--chat-bg);
+    }
+
+    /* Burbujas */
+    .msg { 
+      padding: 8px 10px; 
+      margin: 8px 0; 
+      border-radius: 10px; 
+      line-height: 1.55;
+      font-size: 15.5px;      /* ↑ tamaño */
+      color: var(--chat-fg);  /* ↑ contraste */
+    }
+    .msg.user { 
+      background: var(--bubble-user); 
+      color: var(--chat-fg-strong); 
+      font-weight: 500;
+    }
+    .msg.assistant { 
+      background: var(--bubble-assistant); 
+      color: var(--chat-fg);
+    }
+
+    /* Row de input */
+    .chat-row { display: flex; gap: 10px; margin-top: 10px; }
+    .chat-row input { 
+      flex: 1; 
+      border: 1px solid var(--chat-border);
+      background: var(--chat-bg);
+      color: var(--chat-fg-strong);  /* ↑ contraste del input */
+      border-radius: 10px; 
+      padding: 10px 12px; 
+      font-size: 15.5px;             /* ↑ tamaño */
+      outline: none;
+    }
+    .chat-row input::placeholder { color: var(--placeholder); opacity: 1; }
+
+    .chat-row button { 
+      border: 0; 
+      border-radius: 10px; 
+      padding: 10px 14px; 
+      background: var(--btn-bg); 
+      color: #fff; 
+      font-weight: 600; 
+      font-size: 14.5px;
+      cursor: pointer;
+    }
+    .chat-row button:disabled { opacity: .6; cursor: not-allowed; }
+
+    .small { color: var(--placeholder); font-size: 12.5px; margin-top: 6px; }
+
+    /* (Opcional) si querés reforzar el contraste del bloque de explicación también: */
+    pre#out.output{
+      color: var(--chat-fg);
+      border: 1px solid var(--chat-border);
+      background: #0c1324;
+      font-size: 15.5px;
+      line-height: 1.65;
+    }
+    /* ====== Fin mejoras ====== */
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Entendimiento de Documento</h1>
+    <form id="form">
+      <input type="file" id="file" accept=".docx" required />
+      <button type="submit">Procesar</button>
+      <button type="button" onclick="location.href='/app/index.html'">← Volver</button>
+    </form>
+
+    <h3>Explicación (TXT)</h3>
+    <pre class="output" id="out"></pre>
+
+    <!-- NUEVO: bloque de migración -->
+    <div id="migrate" class="migrate"></div>
+  </div>
+
+  <!-- Tu JS existente para generar la explicación -->
+  <script type="module">
+    import { requireAuth } from '/app/js/auth.js';
+    requireAuth(['qa', 'lider']);
+  </script>
+  <script type="module" src="/app/js/entendimiento.js"></script>
+  <!-- Chat contextual (ya integrado) -->
+  <script type="module" src="/app/js/chat_entendimiento.js"></script>
+</body>
+</html>

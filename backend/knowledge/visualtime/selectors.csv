@@ -1,0 +1,57 @@
+alias,env,strategy,locator,notas
+assertHome,qa,xpath,/html/body/form/div[4]/div[1]/div/h1/a/div,Home visible
+botonAbrirLogin,qa,xpath,/html/body/form/div[4]/div[1]/div/div[1]/table/tbody/tr/td/table/tbody/tr/td[1]/a,Abrir login
+inputUsuario,qa,xpath,/html/body/form/div[3]/table/tbody/tr[1]/td[2]/table/tbody/tr[1]/td/table/tbody/tr/td/input,Usuario
+inputPassword,qa,xpath,/html/body/form/div[3]/table/tbody/tr[2]/td[2]/table/tbody/tr[1]/td/table/tbody/tr/td/input,Contraseña
+botonIngresar,qa,xpath,/html/body/form/div[3]/table/tbody/tr[7]/td[2]/table/tbody/tr/td[1]/table/tbody/tr/td/div[2]/span,Ingresar
+assertLoginOK,qa,xpath,/html/body/form/div[4]/div[2]/div[4]/div[1]/div[2]/div/div/div/table/tbody/tr/td[1]/div/div/div[2]/div[1]/div/table/tbody/tr/td[1]/a,Login OK
+
+inputBuscadorCA,qa,xpath,/html/body/form/div[4]/div[1]/div/div[2]/div/input[5],Buscar CA001
+opcionCA001,qa,xpath,/html/body/ul/li[1],Seleccionar CA001
+botonIngresarCA001,qa,xpath,/html/body/form/div[4]/div[1]/div/div[2]/div/button,Entrar CA001
+assertPantallaCA001,qa,xpath,/html/body/form/table/tbody/tr[1]/td[1]/table/tbody/tr[3]/td[2]/select,CA001 cargado
+
+inputFechaVigencia,qa,xpath,/html/body/form/table/tbody/tr[1]/td[1]/table/tbody/tr[4]/td[2]/div/input,Fecha vigencia (variable)
+comboSucursal,qa,xpath,/html/body/form/table/tbody/tr[1]/td[1]/table/tbody/tr[5]/td[2]/div/select,Sucursal (Casa Central)
+inputOficina,qa,xpath,/html/body/form/table/tbody/tr[1]/td[1]/table/tbody/tr[6]/td[2]/div/table/tbody/tr/td[1]/input,Oficina (variable)
+inputAgencia,qa,xpath,/html/body/form/table/tbody/tr[1]/td[1]/table/tbody/tr[7]/td[2]/div/table/tbody/tr/td[1]/input,Agencia (variable)
+comboRamo,qa,xpath,/html/body/form/table/tbody/tr[1]/td[1]/table/tbody/tr[9]/td[2]/select,Ramo (variable)
+inputProducto,qa,xpath,/html/body/form/table/tbody/tr[1]/td[1]/table/tbody/tr[10]/td[2]/table/tbody/tr/td[1]/input,Producto (variable)
+
+botonContinuar1,qa,xpath,/html/body/div[1]/div[3]/ul/li[3]/a/img,Continuar 1
+tabClientes,qa,xpath,/html/body/table[2]/tbody/tr/td[3]/a,Abrir Clientes
+linkContratante,qa,xpath,/html/body/form/table/tbody/tr[2]/td[3]/label/a,Abrir Contratante
+inputCodigoCliente,qa,xpath,/html/body/form/table/tbody/tr[2]/td[2]/table/tbody/tr[1]/td/input[1],Código Contratante (variable)
+botonPopupAceptarContratante,qa,xpath,/html/body/form/div[2]/div[4]/a[1]/img,Aceptar Contratante
+
+botonContinuar2,qa,xpath,/html/body/div/div[3]/ul/li[3]/a/img,Continuar 2
+tabFacturacion,qa,xpath,/html/body/table[3]/tbody/tr/td[3]/a,Abrir Facturación
+assertFacturacion,qa,xpath,/html/body/form/div/div[1]/h2,Facturación visible
+chkCuotificar,qa,xpath,/html/body/form/table/tbody/tr[5]/td[1]/input,Cuotificar (variable)
+inputTitular,qa,xpath,/html/body/form/table/tbody/tr[10]/td[2]/table/tbody/tr/td[1]/input[1],Titular (variable)
+comboViaPago,qa,xpath,/html/body/form/table/tbody/tr[22]/td[2]/select,Vía de pago (variable)
+chkPoliza,qa,xpath,/html/body/form/table/tbody/tr[23]/td[4]/table/tbody/tr/td[1]/input,Seleccionar póliza
+inputConvenio,qa,xpath,/html/body/form/table/tbody/tr[28]/td[2]/table/tbody/tr/td[1]/input,Convenio (variable)
+botonContinuar3,qa,xpath,/html/body/div/div[3]/ul/li[3]/a/img,Continuar 3
+
+tabModulo,qa,xpath,/html/body/table[9]/tbody/tr/td[3]/a,Abrir Módulo
+assertModulo,qa,xpath,/html/body/form/div[1]/div[1]/h2,Módulo visible
+botonAbrirSelectorModulo,qa,xpath,/html/body/form/div[2]/a/img,Abrir selector Módulo
+inputCodigoModulo,qa,xpath,/html/body/form/table/tbody/tr[1]/td[2]/table/tbody/tr/td[1]/input,Código Módulo (variable)
+botonPopupAceptarModulo,qa,xpath,/html/body/form/div[2]/div[4]/a[1]/img,Aceptar Módulo
+
+botonContinuar4,qa,xpath,/html/body/div/div[3]/ul/li[3]/a/img,Continuar 4
+tabCoberturas,qa,xpath,/html/body/table[12]/tbody/tr/td[3]/a,Abrir Coberturas
+
+# Endoso (locators TODO donde aplique)
+inputBuscarPoliza,qa,xpath,//TODO,Buscar por número de póliza
+botonBuscarPoliza,qa,xpath,//TODO,Botón Buscar póliza (si existe)
+filaPoliza,qa,xpath,//tr[td[contains(., '${numero_poliza}')]],Selecciona fila por número de póliza
+tabEndosos,qa,text,Endosos,Abrir pestaña Endosos
+botonNuevoEndoso,qa,xpath,//TODO,Nuevo endoso
+inputCampoObjetivo,qa,xpath,//TODO,Campo a modificar en el endoso
+botonGuardarEndoso,qa,xpath,//TODO,Guardar endoso
+
+# Comunes/aux
+toast,qa,testid,toast,Toast genérico (si aplica)
+spinner,qa,xpath,//TODO,Spinner para WAIT

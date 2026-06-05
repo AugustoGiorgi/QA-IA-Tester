@@ -1,0 +1,22 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+
+
+# Data local
+backend/data/outputs/
+backend/data/feedback/
+backend/data/sessions/
+backend/data/sessions_coach/
+backend/data/task_attachments/
+backend/data/playwright_videos/
+backend/data/*.docx
+backend/qa_doc_analyzer.db
+backend/.env
+a
+
+
+# SO/otros
+.DS_Store

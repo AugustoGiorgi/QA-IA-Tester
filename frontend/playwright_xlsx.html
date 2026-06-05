@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Playwright</title>
+  <link rel="stylesheet" href="/app/dashboard.css?v=20260602-5" />
+  <style>
+    :root {
+      --pw-bg: #07101f;
+      --pw-panel: #0f172a;
+      --pw-panel-2: #111c33;
+      --pw-line: rgba(148, 163, 184, 0.2);
+      --pw-line-strong: rgba(96, 165, 250, 0.36);
+      --pw-text: #f8fafc;
+      --pw-muted: #94a3b8;
+      --pw-soft: #c7d2fe;
+      --pw-primary: #2563eb;
+      --pw-primary-2: #1d4ed8;
+      --pw-danger: #ef4444;
+      --pw-ok: #22c55e;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(900px 440px at 10% -8%, rgba(37, 99, 235, 0.22), transparent 58%),
+        linear-gradient(180deg, #0b1530 0%, var(--pw-bg) 52%);
+      color: var(--pw-text);
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+
+    .pw-shell {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .pw-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--pw-line);
+    }
+
+    .pw-header h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 42px);
+      letter-spacing: 0;
+    }
+
+    .pw-header p {
+      max-width: 760px;
+      margin: 8px 0 0;
+      color: var(--pw-muted);
+      line-height: 1.5;
+    }
+
+    .pw-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+      padding: 6px;
+      width: fit-content;
+      border: 1px solid var(--pw-line);
+      border-radius: 8px;
+      background: rgba(8, 17, 31, 0.7);
+    }
+
+    .pw-tabs button,
+    .pw-btn {
+      min-height: 40px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 0 15px;
+      background: linear-gradient(180deg, var(--pw-primary), var(--pw-primary-2));
+      color: #fff;
+      font-weight: 850;
+      cursor: pointer;
+      box-shadow: 0 12px 28px rgba(37, 99, 235, 0.2);
+    }
+
+    .pw-tabs button {
+      background: transparent;
+      border-color: transparent;
+      color: #cbd5e1;
+      box-shadow: none;
+    }
+
+    .pw-tabs button.active {
+      background: #1d4ed8;
+      color: #fff;
+      border-color: rgba(147, 197, 253, 0.5);
+    }
+
+    .pw-btn.secondary {
+      background: #111c33;
+      border-color: #334155;
+      color: #dbeafe;
+      box-shadow: none;
+    }
+
+    .pw-btn.danger {
+      background: rgba(127, 29, 29, 0.32);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #fecaca;
+      box-shadow: none;
+    }
+
+    .pw-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .pw-grid {
+      display: grid;
+      grid-template-columns: minmax(360px, 0.78fr) minmax(520px, 1.22fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .pw-card {
+      border: 1px solid var(--pw-line);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.84);
+      padding: 20px;
+      box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+    }
+
+    .pw-card h2 {
+      margin: 0 0 14px;
+      font-size: 20px;
+    }
+
+    .pw-form {
+      position: sticky;
+      top: 18px;
+    }
+
+    .pw-form label {
+      display: block;
+      color: #dbeafe;
+      font-weight: 850;
+      margin: 12px 0 7px;
+    }
+
+    .pw-form input,
+    .pw-form textarea,
+    .pw-form select {
+      width: 100%;
+      border: 1px solid #263958;
+      background: #08111f;
+      color: #f8fafc;
+      border-radius: 8px;
+      padding: 11px 12px;
+      font: inherit;
+      outline: none;
+    }
+
+    .pw-form input::placeholder,
+    .pw-form textarea::placeholder {
+      color: #64748b;
+    }
+
+    .pw-form input:focus,
+    .pw-form textarea:focus,
+    .pw-form select:focus,
+    .pw-code:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+    }
+
+    .pw-form textarea {
+      resize: vertical;
+      min-height: 126px;
+    }
+
+    .pw-two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .pw-mode-panel.hidden,
+    .pw-hidden { display: none !important; }
+
+    .pw-editor-card {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .pw-editor-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--pw-line);
+      background: rgba(8, 17, 31, 0.6);
+    }
+
+    .pw-editor-head h2 { margin: 0; }
+
+    .pw-code {
+      display: block;
+      width: 100%;
+      min-height: 520px;
+      border: 0;
+      border-bottom: 1px solid var(--pw-line);
+      border-radius: 0;
+      background:
+        linear-gradient(90deg, rgba(96, 165, 250, 0.06) 0 52px, transparent 52px),
+        #050b16;
+      color: #dbeafe;
+      font: 13px/1.65 Consolas, Monaco, 'Courier New', monospace;
+      padding: 18px 18px 18px 68px;
+      white-space: pre;
+      resize: vertical;
+      outline: none;
+      tab-size: 2;
+    }
+
+    .pw-code::placeholder { color: #64748b; }
+
+    .pw-status {
+      min-height: 22px;
+      color: #fca5a5;
+      font-weight: 800;
+      margin-top: 12px;
+    }
+
+    .pw-status.ok { color: #86efac; }
+
+    .pw-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .pw-editor-card > .pw-actions {
+      margin: 0;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--pw-line);
+      background: rgba(8, 17, 31, 0.48);
+    }
+
+    .pw-library { margin-top: 18px; }
+
+    .pw-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .pw-item {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      border: 1px solid #243653;
+      border-left: 4px solid #2563eb;
+      border-radius: 8px;
+      padding: 14px;
+      background: rgba(15, 23, 42, 0.82);
+    }
+
+    .pw-item strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .pw-muted {
+      color: var(--pw-muted);
+      font-size: 13px;
+    }
+
+    .pw-vars {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 18px 20px 20px;
+    }
+
+    .pw-vars h2 {
+      font-size: 15px;
+      margin: 0 0 8px;
+      color: #dbeafe;
+    }
+
+    .pw-vars pre {
+      margin: 0;
+      min-height: 150px;
+      max-height: 240px;
+      overflow: auto;
+      border: 1px solid #22324f;
+      border-radius: 8px;
+      background: #08111f;
+      color: #bfdbfe;
+      padding: 12px;
+      font: 12.5px/1.55 Consolas, Monaco, monospace;
+    }
+
+    .pw-notes {
+      padding: 0 20px 20px;
+    }
+
+    .pw-upload-box {
+      border: 1px dashed rgba(96, 165, 250, 0.42);
+      border-radius: 8px;
+      background: rgba(37, 99, 235, 0.07);
+      padding: 16px;
+    }
+
+    .pw-result-box {
+      min-height: 280px;
+      max-height: 440px;
+      overflow: auto;
+      white-space: pre-wrap;
+      border: 1px solid #22324f;
+      border-radius: 8px;
+      background: #08111f;
+      color: #dbeafe;
+      padding: 16px;
+      font: 13px/1.6 Consolas, Monaco, monospace;
+    }
+
+    @media (max-width: 1080px) {
+      .pw-shell { padding: 18px; }
+      .pw-grid,
+      .pw-two,
+      .pw-vars {
+        grid-template-columns: 1fr;
+      }
+      .pw-form { position: static; }
+      .pw-code { min-height: 420px; }
+      .pw-item { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="pw-shell">
+    <header class="pw-header">
+      <div>
+        <h1>Playwright</h1>
+        <p>Genera specs con IA, guardalos en la biblioteca y descarga el codigo cuando lo necesites.</p>
+      </div>
+      <span class="pw-muted">Modulo QA</span>
+    </header>
+
+    <nav class="pw-tabs">
+      <button type="button" class="active" data-tab="ai">Generador IA</button>
+      <button type="button" data-tab="library">Biblioteca</button>
+      <button type="button" data-tab="xlsx">Excel a ZIP</button>
+    </nav>
+
+    <section id="tab-ai" class="pw-tab">
+      <div class="pw-grid">
+        <form id="aiForm" class="pw-card pw-form">
+          <h2>Nueva prueba</h2>
+          <div class="pw-two">
+            <label>Nombre de la prueba<input id="pwTitle" required placeholder="Alta de usuario QA" /></label>
+            <label>ID requerimiento<input id="pwReq" placeholder="REQ-001" /></label>
+          </div>
+          <div class="pw-two">
+            <label>Modulo<input id="pwModule" placeholder="Usuarios" /></label>
+            <label>URL inicial<input id="pwUrl" placeholder="/app/usuarios.html" /></label>
+          </div>
+          <label>Rol de ejecucion<input id="pwRole" value="qa" /></label>
+          <label>Modo
+            <select id="pwMode">
+              <option value="text">Escrito</option>
+              <option value="video">Video + observaciones</option>
+            </select>
+          </label>
+          <div id="textMode" class="pw-mode-panel">
+            <label>Que tiene que hacer el caso<textarea id="pwDescription" placeholder="Describi el flujo, datos y resultado esperado"></textarea></label>
+          </div>
+          <div id="videoMode" class="pw-mode-panel hidden">
+            <label>Video del paso a paso<input id="pwVideo" type="file" accept=".mp4,.webm,.mov,.mkv" /></label>
+          </div>
+          <label>Observaciones<textarea id="pwObservations" placeholder="Aclaraciones, datos particulares, validaciones o selectores conocidos"></textarea></label>
+          <button id="pwGenerate" class="pw-btn" type="submit">Generar codigo</button>
+          <div id="pwStatus" class="pw-status"></div>
+        </form>
+
+        <section class="pw-card pw-editor-card">
+          <div class="pw-editor-head">
+            <h2>Codigo generado</h2>
+            <span class="pw-muted">.spec.ts</span>
+          </div>
+          <textarea id="pwCode" class="pw-code" spellcheck="false" placeholder="El spec generado aparece aca..."></textarea>
+          <div class="pw-actions">
+            <button id="pwSave" class="pw-btn" type="button" disabled>Guardar cambios</button>
+            <button id="pwCopy" class="pw-btn secondary" type="button" disabled>Copiar</button>
+            <button id="pwDownload" class="pw-btn secondary" type="button" disabled>Descargar .spec.ts</button>
+          </div>
+          <div class="pw-vars">
+            <div>
+              <h2>Selectors</h2>
+              <pre id="pwSelectors">{}</pre>
+            </div>
+            <div>
+              <h2>Datos</h2>
+              <pre id="pwData">{}</pre>
+            </div>
+          </div>
+          <div class="pw-library pw-notes">
+            <h2>Notas IA</h2>
+            <div id="pwNotes" class="pw-muted">Sin generacion activa.</div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="tab-library" class="pw-tab pw-hidden">
+      <div class="pw-card">
+        <div class="pw-header">
+          <div>
+            <h2>Biblioteca Playwright</h2>
+            <p>Pruebas guardadas para consultar, editar y descargar.</p>
+          </div>
+          <button id="pwRefresh" class="pw-btn secondary" type="button">Actualizar</button>
+        </div>
+        <div id="pwList" class="pw-list"></div>
+      </div>
+    </section>
+
+    <section id="tab-xlsx" class="pw-tab pw-hidden">
+      <div class="pw-grid">
+        <div class="pw-card pw-form">
+          <h2>Excel a ZIP Playwright</h2>
+          <div class="pw-upload-box">
+            <label>Excel de casos<input id="xlsx" type="file" accept=".xlsx" /></label>
+            <label>ZIP de selectores opcional<input id="zip" type="file" accept=".zip" /></label>
+          </div>
+          <button id="btnGen" class="pw-btn" type="button">Generar ZIP</button>
+        </div>
+        <div class="pw-card">
+          <h2>Resultado</h2>
+          <pre id="result" class="pw-result-box">Subi el Excel y genera el ZIP.</pre>
+          <a id="btnDl" class="pw-btn secondary pw-hidden" href="#" download="playwright_from_excel.zip">Descargar ZIP</a>
+          <span id="statusPill" class="pw-muted"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/app/js/playwright_xlsx.js?v=20260602-2"></script>
+</body>
+</html>

@@ -1,0 +1,1809 @@
+/* Dashboard shell overrides. Loaded after the legacy stylesheet on purpose. */
+:root {
+  --shell-bg: #0b1220;
+  --shell-panel: #111827;
+  --shell-panel-2: #0f172a;
+  --shell-line: #253044;
+  --shell-text: #f8fafc;
+  --shell-muted: #94a3b8;
+  --shell-primary: #2563eb;
+  --shell-primary-soft: rgba(37, 99, 235, 0.16);
+  --shell-success: #22c55e;
+  --shell-warning: #f59e0b;
+  --shell-danger: #ef4444;
+}
+
+html,
+body.app-shell {
+  min-height: 100%;
+  margin: 0;
+}
+
+body.app-shell {
+  display: grid !important;
+  grid-template-columns: 280px minmax(0, 1fr) !important;
+  min-height: 100vh;
+  overflow-x: hidden;
+  color: var(--shell-text);
+  background: radial-gradient(circle at top right, rgba(37, 99, 235, 0.14), transparent 30rem), var(--shell-bg);
+}
+
+body.app-shell .sidebar {
+  position: sticky !important;
+  top: 0;
+  display: flex !important;
+  flex-direction: column !important;
+  width: auto !important;
+  height: 100vh;
+  padding: 22px 16px;
+  border-right: 1px solid var(--shell-line);
+  background: rgba(15, 23, 42, 0.96);
+  box-shadow: 14px 0 40px rgba(0, 0, 0, 0.16);
+}
+
+body.app-shell .brand {
+  display: grid;
+  gap: 4px;
+  padding: 0 8px 18px;
+  border-bottom: 1px solid var(--shell-line);
+}
+
+body.app-shell .brand strong {
+  color: #ffffff;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+body.app-shell .brand span,
+body.app-shell .small.muted,
+body.app-shell .muted {
+  color: var(--shell-muted) !important;
+}
+
+body.app-shell .side-nav {
+  display: grid !important;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 18px 0;
+}
+
+body.app-shell .side-nav button,
+body.app-shell .sidebar-logout,
+body.app-shell .quick-grid button,
+body.app-shell .task-actions button {
+  display: inline-flex !important;
+  align-items: center;
+  min-height: 42px;
+  width: 100%;
+  padding: 10px 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+body.app-shell .side-nav button {
+  justify-content: flex-start;
+  color: #dbeafe !important;
+  background: transparent !important;
+}
+
+body.app-shell .side-nav button:hover,
+body.app-shell .side-nav button.active {
+  color: #ffffff !important;
+  border-color: rgba(96, 165, 250, 0.34) !important;
+  background: var(--shell-primary-soft) !important;
+  transform: translateX(2px);
+}
+
+body.app-shell .sidebar-logout {
+  justify-content: flex-start;
+  margin-top: auto;
+  color: #fecaca !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.26) !important;
+}
+
+body.app-shell .main-shell {
+  min-width: 0;
+  padding: 28px;
+}
+
+body.app-shell .topbar {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 22px;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--shell-line);
+}
+
+body.app-shell .topbar h1 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(1.8rem, 2.4vw, 2.6rem);
+  line-height: 1.1;
+}
+
+body.app-shell #mobileMenu {
+  display: none;
+  width: auto;
+  justify-content: center;
+  color: #dbeafe !important;
+  background: rgba(37, 99, 235, 0.18) !important;
+  border: 1px solid rgba(96, 165, 250, 0.24) !important;
+}
+
+body.app-shell .view-host {
+  min-width: 0;
+}
+
+body.app-shell .dashboard-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 18px;
+}
+
+body.app-shell .panel-block {
+  padding: 18px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.86);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.18);
+}
+
+body.app-shell .panel-block h2 {
+  margin: 0 0 14px;
+  color: #ffffff;
+  font-size: 1.08rem;
+}
+
+body.app-shell .dashboard-wide {
+  grid-column: 1 / -1;
+}
+
+body.app-shell .summary-grid,
+body.app-shell .compact-summary {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+body.app-shell .metric {
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  padding: 14px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  background: var(--shell-panel-2);
+}
+
+body.app-shell .metric span {
+  color: var(--shell-muted);
+  font-size: 0.82rem;
+}
+
+body.app-shell .metric strong {
+  color: #ffffff;
+  font-size: 1.75rem;
+}
+
+body.app-shell .task-list,
+body.app-shell .notification-list,
+body.app-shell .quick-grid {
+  display: grid !important;
+  gap: 12px;
+}
+
+body.app-shell .quick-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+body.app-shell .quick-grid button,
+body.app-shell .task-actions button {
+  justify-content: center;
+  width: auto;
+  color: #ffffff !important;
+  background: var(--shell-primary) !important;
+}
+
+body.app-shell .task-card,
+body.app-shell .notification {
+  padding: 14px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  background: var(--shell-panel-2);
+}
+
+body.app-shell .task-card-head,
+body.app-shell .task-actions,
+body.app-shell .task-meta {
+  display: flex !important;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+body.app-shell .task-meta {
+  justify-content: flex-start;
+  color: var(--shell-muted);
+  font-size: 0.9rem;
+  margin: 10px 0;
+}
+
+body.app-shell .tasks-layout {
+  display: grid !important;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+body.app-shell #taskForm,
+body.app-shell .modal-card form {
+  display: grid;
+  gap: 13px;
+}
+
+body.app-shell #taskForm label,
+body.app-shell .modal-card label {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  color: #dbeafe;
+  font-weight: 700;
+}
+
+body.app-shell #taskForm input,
+body.app-shell #taskForm select,
+body.app-shell .task-actions select,
+body.app-shell .modal-card input,
+body.app-shell .modal-card select,
+body.app-shell .modal-card textarea {
+  min-height: 42px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  color: var(--shell-text);
+  background: var(--shell-panel-2);
+  outline: none;
+}
+
+body.app-shell #taskForm input:focus,
+body.app-shell #taskForm select:focus,
+body.app-shell .task-actions select:focus,
+body.app-shell .modal-card input:focus,
+body.app-shell .modal-card select:focus,
+body.app-shell .modal-card textarea:focus {
+  border-color: var(--shell-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+body.app-shell #taskForm button[type="submit"] {
+  min-height: 42px;
+  border-radius: 8px;
+}
+
+body.app-shell .task-actions {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+body.app-shell .task-actions select {
+  width: min(190px, 100%);
+}
+
+body.app-shell .task-card strong {
+  color: #ffffff;
+}
+
+body.app-shell .module-frame {
+  display: block;
+  width: 100%;
+  min-height: calc(100vh - 118px);
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+body.app-shell .modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(3, 7, 18, 0.72);
+}
+
+body.app-shell .modal.hidden {
+  display: none !important;
+}
+
+body.app-shell .modal-card {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  background: var(--shell-panel);
+}
+
+body.app-shell .modal-card.task-modal-card {
+  width: min(1040px, calc(100vw - 42px));
+  max-height: 90vh;
+  padding: 28px;
+  border-color: rgba(96, 165, 250, 0.3);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(8, 17, 31, 0.98));
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.45);
+}
+
+body.app-shell .modal-card.overdue-modal-card {
+  width: min(760px, calc(100vw - 36px));
+  border-color: rgba(245, 158, 11, 0.36);
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(10, 16, 28, 0.98));
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.45);
+}
+
+body.app-shell .overdue-alert {
+  display: grid;
+  gap: 18px;
+}
+
+body.app-shell .overdue-alert-head {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding-right: 34px;
+}
+
+body.app-shell .overdue-alert-head h2 {
+  margin: 0 0 6px;
+  color: #ffffff;
+}
+
+body.app-shell .overdue-icon {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(245, 158, 11, 0.36);
+  border-radius: 8px;
+  color: #fef3c7;
+  background: rgba(245, 158, 11, 0.14);
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+body.app-shell .overdue-task-list {
+  display: grid;
+  gap: 10px;
+}
+
+body.app-shell .overdue-task-item {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  border: 1px solid rgba(245, 158, 11, 0.26);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.8);
+}
+
+body.app-shell .overdue-task-item strong {
+  color: #ffffff;
+}
+
+body.app-shell .overdue-task-item button {
+  width: auto;
+  min-width: 112px;
+  min-height: 40px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: var(--shell-primary);
+}
+
+body.app-shell .modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 !important;
+  border: 1px solid rgba(96, 165, 250, 0.24) !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  background: var(--shell-primary) !important;
+}
+
+body.app-shell .ok { color: var(--shell-success) !important; }
+body.app-shell .warn { color: var(--shell-warning) !important; }
+body.app-shell .bad { color: var(--shell-danger) !important; }
+
+body.login-shell {
+  min-height: 100vh;
+  color: var(--shell-text);
+  background:
+    radial-gradient(circle at 24% 20%, rgba(37, 99, 235, 0.16), transparent 28rem),
+    radial-gradient(circle at 76% 84%, rgba(14, 165, 233, 0.08), transparent 24rem),
+    var(--shell-bg);
+}
+
+body.login-shell .login-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+body.login-shell .login-card {
+  width: min(430px, 100%);
+  padding: 28px;
+  border: 1px solid var(--shell-line);
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.9);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+}
+
+body.login-shell .login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--shell-line);
+}
+
+body.login-shell .login-mark {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(96, 165, 250, 0.32);
+  border-radius: 8px;
+  color: #ffffff;
+  background: var(--shell-primary);
+  font-weight: 800;
+}
+
+body.login-shell .login-brand strong,
+body.login-shell .login-brand span {
+  display: block;
+}
+
+body.login-shell .login-brand span {
+  color: var(--shell-muted);
+  font-size: 0.9rem;
+}
+
+body.login-shell .login-head {
+  margin: 26px 0 18px;
+}
+
+body.login-shell .login-head h1 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+body.login-shell .login-form {
+  display: grid;
+  gap: 14px;
+}
+
+body.login-shell .login-form label {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  color: #e5e7eb;
+  font-weight: 700;
+}
+
+body.login-shell .login-form input {
+  min-height: 44px;
+  padding: 11px 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  color: var(--shell-text);
+  background: var(--shell-panel-2);
+}
+
+body.login-shell .login-form input:focus {
+  border-color: var(--shell-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+body.login-shell #btnLogin {
+  min-height: 44px;
+  margin-top: 4px;
+  border-radius: 8px;
+  background: var(--shell-primary);
+}
+
+body.login-shell .field-error {
+  min-height: 20px;
+  color: #fecaca;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+body.module-page {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--shell-text);
+  background:
+    radial-gradient(circle at 92% 8%, rgba(37, 99, 235, 0.1), transparent 28rem),
+    var(--shell-bg);
+}
+
+body.module-page .module-container {
+  max-width: none;
+  margin: 0;
+  padding: 22px;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.module-page .page-head {
+  margin: 0 0 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--shell-line);
+}
+
+body.module-page .page-head h1 {
+  margin: 0 0 5px;
+  color: #ffffff;
+  font-size: clamp(1.65rem, 2vw, 2.2rem);
+}
+
+body.module-page .module-grid {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+}
+
+body.module-page .import-grid,
+body.module-page .users-grid {
+  grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.08fr);
+}
+
+body.module-page .module-panel {
+  border-radius: 8px;
+  border-color: var(--shell-line);
+  background: rgba(17, 24, 39, 0.88);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+}
+
+body.module-page .module-panel h2 {
+  margin-top: 0;
+  color: #ffffff;
+}
+
+body.module-page .module-form,
+body.module-page .form-grid {
+  display: grid;
+  gap: 13px;
+}
+
+body.module-page .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.module-page label {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  color: #dbeafe;
+  font-weight: 700;
+}
+
+body.module-page input[type="text"],
+body.module-page input[type="password"],
+body.module-page input[type="file"],
+body.module-page select,
+body.module-page textarea {
+  min-height: 42px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  color: var(--shell-text);
+  background: var(--shell-panel-2);
+}
+
+body.module-page input:focus,
+body.module-page select:focus,
+body.module-page textarea:focus {
+  border-color: var(--shell-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+body.module-page button {
+  border-radius: 8px;
+}
+
+body.module-page .actions-panel {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+body.module-page .dropzone {
+  min-height: 230px;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  padding: 22px;
+  border: 1px dashed rgba(96, 165, 250, 0.44);
+  border-radius: 8px;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.78);
+  cursor: pointer;
+}
+
+body.module-page .dropzone input[type="file"] {
+  display: none;
+}
+
+body.module-page .dropzone.dragover {
+  border-color: var(--shell-primary);
+  background: var(--shell-primary-soft);
+}
+
+body.module-page .dropzone.invalid {
+  border-color: var(--shell-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+body.module-page .drop-icon {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 8px;
+  color: #ffffff;
+  background: var(--shell-primary);
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+body.module-page .users-box {
+  display: grid;
+  gap: 12px;
+}
+
+body.module-page .users-head {
+  align-items: center;
+}
+
+body.module-page .users-manager {
+  display: grid;
+  gap: 16px;
+}
+
+body.module-page .users-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+body.module-page .users-toolbar h2 {
+  margin: 0 0 4px;
+}
+
+body.module-page .users-tools {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
+body.module-page .search-field {
+  min-width: min(320px, 42vw);
+}
+
+body.module-page .users-list {
+  display: grid;
+  gap: 10px;
+}
+
+body.module-page .user-card {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  background: var(--shell-panel-2);
+}
+
+body.module-page .user-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+body.module-page .user-main strong,
+body.module-page .user-main span {
+  display: block;
+}
+
+body.module-page .user-main strong {
+  color: #ffffff;
+}
+
+body.module-page .user-main span {
+  color: var(--shell-muted);
+  font-size: 0.88rem;
+}
+
+body.module-page .user-avatar {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 8px;
+  color: #ffffff;
+  background: rgba(37, 99, 235, 0.2);
+  font-weight: 900;
+}
+
+body.module-page .user-role {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 170px;
+}
+
+body.module-page .user-actions,
+body.module-page .modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+body.module-page .btn-danger,
+body.app-shell .btn-danger {
+  color: #ffffff !important;
+  background: #dc2626 !important;
+  border: 1px solid rgba(248, 113, 113, 0.28) !important;
+}
+
+body.module-page .btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+body.module-page .user-modal-card {
+  width: min(560px, 100%);
+}
+
+body.module-page .modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(3, 7, 18, 0.72);
+}
+
+body.module-page .modal.hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+body.module-page .modal-card {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  background: var(--shell-panel);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+body.module-page .modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 !important;
+  border: 1px solid rgba(96, 165, 250, 0.24) !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  background: var(--shell-primary) !important;
+}
+
+body.module-page .modal-head {
+  padding-right: 44px;
+  margin-bottom: 16px;
+}
+
+body.module-page .modal-head h2 {
+  margin: 0 0 5px;
+  color: #ffffff;
+}
+
+body.module-page .modal-user-form {
+  display: grid;
+  gap: 13px;
+}
+
+body.module-page .modal-active {
+  justify-content: flex-start;
+}
+
+body.module-page .delete-summary {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+body.module-page .delete-summary strong {
+  color: #ffffff;
+}
+
+body.module-page .delete-summary span {
+  color: var(--shell-muted);
+}
+
+body.module-page .user-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(210px, 1fr) 150px 110px minmax(160px, 0.9fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+  background: var(--shell-panel-2);
+}
+
+body.module-page .user-row strong {
+  color: #ffffff;
+}
+
+body.module-page .inline-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e5e7eb;
+}
+
+body.module-page .inline-check input {
+  width: auto;
+  min-height: auto;
+}
+
+body.module-page .status-panel {
+  margin-top: 18px;
+}
+
+body.module-page .status-panel.hidden {
+  display: none !important;
+}
+
+body.module-page table.compact {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+body.module-page table.compact th,
+body.module-page table.compact td {
+  padding: 10px;
+  border-bottom: 1px solid var(--shell-line);
+  text-align: left;
+}
+
+.project-chat-widget {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 10020;
+}
+
+.project-chat-bubble {
+  display: inline-grid;
+  width: 62px;
+  height: 62px;
+  min-height: 62px;
+  place-items: center;
+  padding: 0 !important;
+  border: 1px solid rgba(186, 230, 253, 0.55) !important;
+  border-radius: 50% !important;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #0ea5e9, #2563eb 62%, #1d4ed8) !important;
+  box-shadow:
+    0 0 0 8px rgba(14, 165, 233, 0.12),
+    0 18px 45px rgba(14, 165, 233, 0.34);
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.project-chat-panel {
+  position: absolute;
+  right: 0;
+  bottom: 76px;
+  display: none;
+  flex-direction: column;
+  width: min(380px, calc(100vw - 32px));
+  height: min(520px, calc(100vh - 120px));
+  overflow: hidden;
+  border: 1px solid rgba(125, 211, 252, 0.34);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(15, 45, 85, 0.98), rgba(8, 17, 34, 0.99) 34%),
+    var(--shell-panel);
+  box-shadow:
+    0 0 0 1px rgba(14, 165, 233, 0.12),
+    0 28px 90px rgba(0, 0, 0, 0.52),
+    0 0 70px rgba(14, 165, 233, 0.16);
+}
+
+.project-chat-panel.active {
+  display: flex;
+}
+
+.project-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.24);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.24), rgba(37, 99, 235, 0.2));
+}
+
+.project-chat-header strong,
+.project-chat-header span {
+  display: block;
+}
+
+.project-chat-header strong {
+  color: #ffffff;
+}
+
+.project-chat-header span {
+  margin-top: 2px;
+  color: #bae6fd;
+  font-size: 0.78rem;
+}
+
+.project-chat-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.project-chat-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(186, 230, 253, 0.18) !important;
+  color: #f0f9ff !important;
+  background: rgba(8, 47, 73, 0.5) !important;
+}
+
+.project-chat-messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 18rem),
+    #06111f;
+}
+
+.project-msg {
+  max-width: 82%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #e5e7eb;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  font-size: 0.92rem;
+}
+
+.project-msg.user {
+  align-self: flex-end;
+  color: #ffffff;
+  background: var(--shell-primary);
+  border-bottom-right-radius: 4px;
+}
+
+.project-msg.bot {
+  align-self: flex-start;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  background: rgba(12, 35, 64, 0.92);
+  border-bottom-left-radius: 4px;
+}
+
+.project-chat-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid rgba(125, 211, 252, 0.22);
+  background: rgba(7, 19, 35, 0.98);
+}
+
+.project-chat-form input {
+  min-width: 0;
+  flex: 1;
+  min-height: 42px;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  border-radius: 8px;
+  color: var(--shell-text);
+  background: #081424;
+}
+
+.project-chat-form button {
+  width: auto;
+  min-height: 42px;
+  border-radius: 8px;
+  background: #0ea5e9;
+}
+
+body.app-shell .azure-task-card {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  padding: 16px 16px 14px 20px;
+  border: 1px solid #27364f;
+  border-left: 5px solid #60a5fa;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(9, 18, 34, 0.98)),
+    var(--shell-panel-2);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+}
+
+body.app-shell .azure-task-card::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #60a5fa;
+  box-shadow: 0 0 0 5px rgba(96, 165, 250, 0.12);
+}
+
+body.app-shell .azure-task-card.status-pendiente { border-left-color: #f59e0b; }
+body.app-shell .azure-task-card.status-en_progreso { border-left-color: #0ea5e9; }
+body.app-shell .azure-task-card.status-bloqueada { border-left-color: #ef4444; }
+body.app-shell .azure-task-card.status-en_revision { border-left-color: #a855f7; }
+body.app-shell .azure-task-card.status-resuelta,
+body.app-shell .azure-task-card.status-cerrada { border-left-color: #22c55e; }
+
+body.app-shell .azure-task-card.priority-alta::after,
+body.app-shell .azure-task-card.priority-critica::after {
+  background: #ef4444;
+  box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.14);
+}
+
+body.app-shell .azure-task-card .task-card-head {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+}
+
+body.app-shell .azure-task-card .task-card-head strong {
+  display: block;
+  color: #ffffff;
+  font-size: 1.02rem;
+  line-height: 1.25;
+}
+
+body.app-shell .azure-task-card .task-card-head p {
+  margin: 7px 0 0;
+  color: #a8b7cf !important;
+}
+
+body.app-shell .task-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.74);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+body.app-shell .azure-task-card .task-meta {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+body.app-shell .azure-task-card .task-meta span {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+body.app-shell .azure-task-card .task-meta small {
+  color: #8aa0bd;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+body.app-shell .azure-task-card .task-meta b {
+  color: #e5e7eb;
+  font-size: 0.9rem;
+}
+
+body.app-shell .azure-task-card .task-actions {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+body.app-shell .azure-task-card .task-actions select {
+  min-width: 170px;
+  background: #081424;
+}
+
+body.app-shell .azure-task-card .task-actions button {
+  min-height: 38px;
+  padding: 9px 12px !important;
+}
+
+body.app-shell .task-edit-form {
+  display: grid;
+  gap: 12px;
+}
+
+body.app-shell .task-edit-form textarea {
+  min-height: 104px;
+}
+
+body.app-shell .form-grid.two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+body.app-shell .task-history {
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  padding-top: 8px;
+}
+
+body.app-shell .task-history summary {
+  cursor: pointer;
+  color: #bfdbfe;
+  font-weight: 800;
+}
+
+body.app-shell .history-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+body.app-shell .history-item {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.24);
+}
+
+body.app-shell .history-item strong,
+body.app-shell .history-item span {
+  display: block;
+}
+
+body.app-shell .history-item span {
+  color: #8aa0bd;
+  font-size: 0.82rem;
+}
+
+body.app-shell .history-item p {
+  margin: 6px 0 0;
+  color: #e5e7eb;
+}
+
+body.app-shell .quality-panel {
+  display: grid;
+  gap: 16px;
+}
+
+body.app-shell .quality-head,
+body.app-shell .quality-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+body.app-shell .quality-head h2 {
+  margin: 0 0 4px;
+}
+
+body.app-shell .quality-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--shell-line);
+  border-radius: 8px;
+}
+
+body.app-shell .quality-table {
+  width: 100%;
+  min-width: 1480px;
+  border-collapse: collapse;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+body.app-shell .quality-table th,
+body.app-shell .quality-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  text-align: left;
+  vertical-align: middle;
+}
+
+body.app-shell .quality-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #dbeafe;
+  background: #0b1a30;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+body.app-shell .quality-table td {
+  color: #e5e7eb;
+  font-size: 0.9rem;
+}
+
+body.app-shell .quality-table tr:hover td {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+body.app-shell .calc-cell,
+body.app-shell .readonly-calc {
+  color: #bae6fd !important;
+  background: rgba(14, 165, 233, 0.12) !important;
+  font-weight: 800;
+}
+
+body.app-shell .quality-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+body.app-shell .activity-filters {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(160px, 220px) minmax(240px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin: 18px 0;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+body.app-shell .activity-filters label {
+  color: #dbeafe;
+  font-weight: 800;
+}
+
+body.app-shell .activity-filters select,
+body.app-shell .activity-filters input {
+  width: 100%;
+  margin-top: 7px;
+  border: 1px solid #263958;
+  background: #0b1220;
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 11px 12px;
+}
+
+body.app-shell .activity-list {
+  display: grid;
+  gap: 10px;
+}
+
+body.app-shell .activity-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 14px 16px;
+}
+
+body.app-shell .activity-item p {
+  margin: 5px 0 0;
+}
+
+body.app-shell .activity-detail pre {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #263958;
+  border-radius: 8px;
+  background: #08111f;
+  padding: 12px;
+  color: #dbeafe;
+}
+
+body.app-shell .activity-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+body.app-shell .activity-summary-grid div {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(8, 17, 31, 0.62);
+  padding: 10px 12px;
+}
+
+body.app-shell .activity-summary-grid span {
+  display: block;
+  color: #93a4b8;
+  font-size: 0.78rem;
+  margin-bottom: 4px;
+}
+
+body.app-shell .activity-summary-grid strong {
+  color: #f8fafc;
+}
+
+body.app-shell .activity-detail-main {
+  color: #dbeafe;
+  font-size: 1rem;
+}
+
+body.app-shell .activity-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+body.app-shell .activity-detail-actions a,
+body.app-shell .activity-detail-actions button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+body.app-shell .activity-action-button {
+  border: 1px solid rgba(96, 165, 250, 0.5);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+body.app-shell .activity-action-button:hover {
+  border-color: rgba(147, 197, 253, 0.85);
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.32);
+  transform: translateY(-1px);
+}
+
+body.app-shell .activity-changes,
+body.app-shell .activity-ai-output {
+  margin-top: 12px;
+}
+
+body.app-shell .activity-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+body.app-shell .activity-ai-text {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid #263958;
+  border-radius: 8px;
+  background: #08111f;
+  padding: 12px;
+  color: #dbeafe;
+  line-height: 1.5;
+}
+
+body.app-shell .task-highlight {
+  outline: 2px solid #60a5fa;
+  box-shadow: 0 0 0 5px rgba(96, 165, 250, 0.18);
+}
+
+body.app-shell .tasks-board {
+  display: grid;
+  gap: 16px;
+}
+
+body.app-shell .tasks-board-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+body.app-shell .tasks-board-head h2 {
+  margin: 0 0 6px;
+}
+
+body.app-shell .task-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(150px, 0.7fr) minmax(150px, 0.7fr) minmax(220px, 1fr);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(8, 17, 31, 0.48);
+}
+
+body.app-shell .task-filters label {
+  color: #dbeafe;
+  font-weight: 800;
+}
+
+body.app-shell .task-filters input,
+body.app-shell .task-filters select {
+  width: 100%;
+  margin-top: 7px;
+  border: 1px solid #263958;
+  background: #0b1220;
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 11px 12px;
+}
+
+body.app-shell .task-list-header,
+body.app-shell .task-preview-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.35fr) minmax(260px, 1fr) minmax(180px, 0.7fr) minmax(130px, 0.45fr);
+  gap: 14px;
+  align-items: center;
+}
+
+body.app-shell .task-list-header {
+  color: #93a4b8;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+body.app-shell .task-preview-list {
+  display: grid;
+  gap: 10px;
+}
+
+body.app-shell .task-preview-row {
+  cursor: pointer;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-left: 4px solid #0ea5e9;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.78);
+  padding: 14px;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+body.app-shell .task-preview-row:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(96, 165, 250, 0.45);
+  transform: translateY(-1px);
+}
+
+body.app-shell .task-preview-row.status-pendiente { border-left-color: #f59e0b; }
+body.app-shell .task-preview-row.status-en_progreso { border-left-color: #0ea5e9; }
+body.app-shell .task-preview-row.status-bloqueada { border-left-color: #ef4444; }
+body.app-shell .task-preview-row.status-en_revision { border-left-color: #a855f7; }
+body.app-shell .task-preview-row.status-resuelta,
+body.app-shell .task-preview-row.status-cerrada { border-left-color: #22c55e; }
+
+body.app-shell .task-preview-main strong {
+  display: block;
+  color: #f8fafc;
+  margin-bottom: 5px;
+}
+
+body.app-shell .task-preview-people,
+body.app-shell .task-preview-dates {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+body.app-shell .task-preview-dates {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.app-shell .task-preview-people span,
+body.app-shell .task-preview-dates span {
+  min-width: 0;
+}
+
+body.app-shell .task-preview-people small,
+body.app-shell .task-preview-dates small {
+  display: block;
+  color: #93a4b8;
+  font-size: 0.72rem;
+}
+
+body.app-shell .task-preview-people b,
+body.app-shell .task-preview-dates b {
+  display: block;
+  color: #e5e7eb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-shell .task-preview-state {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+body.app-shell .task-detail-modal {
+  display: grid;
+  gap: 22px;
+}
+
+body.app-shell .task-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  padding-right: 48px;
+}
+
+body.app-shell .task-detail-head h2 {
+  margin: 0 0 10px;
+  font-size: 1.65rem;
+}
+
+body.app-shell .task-detail-head p {
+  max-width: 760px;
+  line-height: 1.55;
+}
+
+body.app-shell .detail-meta {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+body.app-shell .detail-meta span {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(8, 17, 31, 0.5);
+  padding: 12px;
+}
+
+body.app-shell .detail-meta small {
+  display: block;
+  color: #93a4b8;
+  font-size: 0.74rem;
+  margin-bottom: 5px;
+}
+
+body.app-shell .detail-meta b {
+  display: block;
+  color: #f8fafc;
+  overflow-wrap: anywhere;
+}
+
+body.app-shell .detail-actions {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  padding-bottom: 20px;
+}
+
+body.app-shell .task-detail-section h3 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+}
+
+body.app-shell .task-detail-section {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: rgba(8, 17, 31, 0.38);
+  padding: 16px;
+}
+
+body.app-shell .empty-task-list {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  padding: 18px;
+}
+
+@media (max-width: 900px) {
+  body.app-shell .activity-filters {
+    grid-template-columns: 1fr;
+  }
+
+  body.app-shell .activity-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body.app-shell .activity-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.app-shell .task-filters,
+  body.app-shell .task-list-header,
+  body.app-shell .task-preview-row,
+  body.app-shell .detail-meta {
+    grid-template-columns: 1fr;
+  }
+
+  body.app-shell .task-list-header {
+    display: none;
+  }
+
+  body.app-shell .task-preview-state {
+    justify-items: start;
+  }
+
+  body.app-shell .tasks-board-head,
+  body.app-shell .task-detail-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body.app-shell .modal-card.task-modal-card {
+    width: calc(100vw - 24px);
+    padding: 20px;
+  }
+
+  body.app-shell .task-detail-head {
+    padding-right: 42px;
+  }
+}
+
+body.app-shell .quality-form {
+  display: grid;
+  gap: 12px;
+}
+
+body.app-shell .empty-cell {
+  text-align: center !important;
+  color: var(--shell-muted) !important;
+}
+
+@media (max-width: 760px) {
+  body.app-shell .azure-task-card .task-card-head,
+  body.app-shell .azure-task-card .task-meta {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  body.module-page .import-grid,
+  body.module-page .users-grid,
+  body.module-page .form-grid,
+  body.module-page .user-row {
+    grid-template-columns: 1fr;
+  }
+
+  body.module-page .users-toolbar,
+  body.module-page .users-tools,
+  body.module-page .user-card,
+  body.module-page .user-role,
+  body.module-page .user-actions {
+    align-items: stretch;
+    flex-direction: column;
+    grid-template-columns: 1fr;
+  }
+
+  body.module-page .search-field {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 920px) {
+  body.app-shell {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.app-shell .sidebar {
+    position: fixed !important;
+    z-index: 9998;
+    inset: 0 auto 0 0;
+    width: min(280px, 86vw) !important;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  body.app-shell #mobileMenu {
+    display: inline-flex;
+  }
+
+  body.app-shell .main-shell {
+    padding: 18px 14px;
+  }
+
+  body.app-shell .dashboard-grid,
+  body.app-shell .tasks-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  body.app-shell .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body.app-shell .summary-grid,
+  body.app-shell .quick-grid {
+    grid-template-columns: 1fr;
+  }
+}
