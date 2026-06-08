@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 import os
+from fastapi import HTTPException
 
 from services.ai import complete
 
@@ -15,8 +16,16 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB", "Life_Projects")
 
-client = AsyncIOMotorClient(MONGO_URI)
-db = client[MONGO_DB]
+client = None
+
+
+def _chat_db():
+    global client
+    if not MONGO_URI or MONGO_URI == "value":
+        raise HTTPException(status_code=500, detail="MONGO_URI no esta configurado para el chatbot.")
+    if client is None:
+        client = AsyncIOMotorClient(MONGO_URI)
+    return client[MONGO_DB]
 
 # ---------- Helpers ----------
 
@@ -42,7 +51,7 @@ def extract_project_id(text: str) -> Optional[str]:
 async def find_project_flexible(message: str) -> Optional[str]:
     msg = normalize(message)
 
-    async for p in db.Projects.find({}):
+    async for p in _chat_db().Projects.find({}):
         if (
             normalize(p.get("name")) in msg or
             normalize(p.get("area")) in msg or
@@ -55,7 +64,7 @@ async def find_project_flexible(message: str) -> Optional[str]:
 async def find_responsable_flexible(message: str) -> Optional[str]:
     msg = normalize(message)
 
-    responsables = await db.Tasks.distinct("responsable")
+    responsables = await _chat_db().Tasks.distinct("responsable")
 
     for r in responsables:
         if normalize(r) in msg:
@@ -145,7 +154,7 @@ async def exec_intent(parsed: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
 
     tasks = []
 
-    async for t in db.Tasks.find(q):
+    async for t in _chat_db().Tasks.find(q):
 
         fecha_str = t.get("fecha_fin")
         if not fecha_str:
