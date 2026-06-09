@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from pymongo import ASCENDING, DESCENDING
 
-from services.auth import _db, current_user, require_roles
+from services.auth import _db, current_user
 
 
 router = APIRouter(prefix="/api/activity", tags=["activity"])
@@ -78,16 +78,20 @@ async def create_activity(payload: ActivityIn, user: Dict[str, Any] = Depends(cu
     return {"ok": True}
 
 
-@router.get("", dependencies=[Depends(require_roles("lider"))])
+@router.get("")
 async def list_activity(
     username: Optional[str] = Query(None),
     module: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     limit: int = Query(120, ge=1, le=500),
+    user: Dict[str, Any] = Depends(current_user),
 ):
     await _ensure_indexes()
     query: Dict[str, Any] = {}
-    if username:
+    can_view_all = user.get("role") == "lider"
+    if not can_view_all:
+        query["username"] = user["username"]
+    elif username:
         query["username"] = username.strip().lower()
     if module:
         query["module"] = module.strip()
@@ -101,20 +105,25 @@ async def list_activity(
         ]
     query["action"] = {"$nin": ["Click", "Navegacion", "Playwright tab"], "$not": {"$regex": "^API "}}
     docs = await _db()[COLLECTION].find(query).sort("created_at", DESCENDING).to_list(limit)
-    users = await _db()[COLLECTION].distinct("username")
-    modules = await _db()[COLLECTION].distinct("module")
+    scope = {} if can_view_all else {"username": user["username"]}
+    users = await _db()[COLLECTION].distinct("username", scope)
+    modules = await _db()[COLLECTION].distinct("module", scope)
     return {
         "items": [_public(doc) for doc in docs],
         "users": sorted([item for item in users if item]),
         "modules": sorted([item for item in modules if item]),
+        "can_view_all": can_view_all,
     }
 
 
-@router.get("/{activity_id}", dependencies=[Depends(require_roles("lider"))])
-async def get_activity(activity_id: str):
+@router.get("/{activity_id}")
+async def get_activity(activity_id: str, user: Dict[str, Any] = Depends(current_user)):
     if not ObjectId.is_valid(activity_id):
         raise HTTPException(status_code=400, detail="ID invalido.")
-    doc = await _db()[COLLECTION].find_one({"_id": ObjectId(activity_id)})
+    query: Dict[str, Any] = {"_id": ObjectId(activity_id)}
+    if user.get("role") != "lider":
+        query["username"] = user["username"]
+    doc = await _db()[COLLECTION].find_one(query)
     if not doc:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado.")
     return {"item": _public(doc)}

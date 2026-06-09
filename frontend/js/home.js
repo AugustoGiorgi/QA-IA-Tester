@@ -22,7 +22,7 @@ const tools = [
   { id: 'funcional', roles: ['funcional'], label: 'Doc. Funcional', href: '/app/chat-funcional.html' },
   { id: 'importacion', roles: ['lider'], label: 'Importacion', href: '/app/importacion.html' },
   { id: 'usuarios', roles: ['lider'], label: 'Usuarios', href: '/app/usuarios.html?v=20260519-2' },
-  { id: 'movimientos', roles: ['lider'], label: 'Movimientos' },
+  { id: 'movimientos', roles: ['qa', 'funcional', 'lider'], label: 'Movimientos' },
 ];
 
 const stateLabels = {
@@ -79,11 +79,13 @@ function renderModule(tool) {
 }
 
 async function renderActivityLog(filters = {}) {
-  setHeader('Movimientos', 'Auditoria de acciones');
+  const current = getUser();
+  const canViewAll = current.role === 'lider';
+  setHeader('Movimientos', canViewAll ? 'Auditoria de acciones' : 'Mi actividad');
   appView.innerHTML = `<div class="panel-block">Cargando movimientos...</div>`;
   try {
     const params = new URLSearchParams();
-    if (filters.username) params.set('username', filters.username);
+    if (canViewAll && filters.username) params.set('username', filters.username);
     if (filters.module) params.set('module', filters.module);
     if (filters.q) params.set('q', filters.q);
     const data = await getJson(`/api/activity${params.toString() ? `?${params}` : ''}`);
@@ -91,18 +93,20 @@ async function renderActivityLog(filters = {}) {
       <section class="panel-block activity-panel">
         <div class="quality-head">
           <div>
-            <h2>Registro de movimientos</h2>
-            <p class="small muted">Consulta por usuario, modulo o texto y entra al detalle de cada accion.</p>
+            <h2>${canViewAll ? 'Registro de movimientos' : 'Mis movimientos'}</h2>
+            <p class="small muted">${canViewAll ? 'Consulta por usuario, modulo o texto y entra al detalle de cada accion.' : 'Consulta tu actividad por modulo o texto y entra al detalle de cada accion.'}</p>
           </div>
           <button id="refreshActivity" type="button" class="btn-secondary">Actualizar</button>
         </div>
         <div class="activity-filters">
-          <label>Usuario
-            <select id="activityUser">
-              <option value="">Todos</option>
-              ${(data.users || []).map(username => `<option value="${escapeHtml(username)}" ${filters.username === username ? 'selected' : ''}>${escapeHtml(username)}</option>`).join('')}
-            </select>
-          </label>
+          ${canViewAll ? `
+            <label>Usuario
+              <select id="activityUser">
+                <option value="">Todos</option>
+                ${(data.users || []).map(username => `<option value="${escapeHtml(username)}" ${filters.username === username ? 'selected' : ''}>${escapeHtml(username)}</option>`).join('')}
+              </select>
+            </label>
+          ` : ''}
           <label>Modulo
             <select id="activityModule">
               <option value="">Todos</option>
@@ -122,7 +126,7 @@ async function renderActivityLog(filters = {}) {
     document.getElementById('refreshActivity')?.addEventListener('click', () => renderActivityLog(filters));
     document.getElementById('applyActivityFilters')?.addEventListener('click', () => {
       renderActivityLog({
-        username: document.getElementById('activityUser').value,
+        username: canViewAll ? document.getElementById('activityUser')?.value || '' : '',
         module: document.getElementById('activityModule').value,
         q: document.getElementById('activitySearch').value.trim(),
       });
