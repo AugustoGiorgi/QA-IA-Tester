@@ -63,8 +63,16 @@ body.app-shell .muted {
 body.app-shell .side-nav {
   display: grid !important;
   grid-template-columns: 1fr;
+  align-content: start;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 8px;
   margin: 18px 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
 }
 
 body.app-shell .side-nav button,
@@ -99,6 +107,7 @@ body.app-shell .side-nav button.active {
 }
 
 body.app-shell .sidebar-logout {
+  flex: 0 0 auto;
   justify-content: flex-start;
   margin-top: auto;
   color: #fecaca !important;
