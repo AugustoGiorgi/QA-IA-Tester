@@ -6,7 +6,7 @@ Crear un **Web Service** desde el repo del proyecto usando el archivo `render.ya
 
 Render debe ejecutar:
 
-- Build command: `cd backend && pip install --upgrade pip && pip install -r requirements.txt`
+- Build command: `cd backend && pip install --upgrade pip && pip install --no-cache-dir --force-reinstall -r requirements.txt`
 - Start command: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
 - Health check: `/api/health`
 
