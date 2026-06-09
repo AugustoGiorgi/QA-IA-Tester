@@ -35,6 +35,12 @@ class LoginIn(BaseModel):
     password: str
 
 
+class PasswordChangeIn(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+
 class UserIn(BaseModel):
     username: str
     email: str
@@ -184,6 +190,27 @@ async def me(user: Dict[str, Any] = Depends(current_user)):
 async def logout(authorization: Optional[str] = Header(None)):
     if authorization and authorization.lower().startswith("bearer "):
         _sessions.pop(authorization.split(" ", 1)[1].strip(), None)
+    return {"ok": True}
+
+
+@router.post("/change-password")
+async def change_password(payload: PasswordChangeIn, user: Dict[str, Any] = Depends(current_user)):
+    if not _verify_password(payload.current_password, user):
+        raise HTTPException(status_code=400, detail="La contrasena actual no es correcta.")
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Las contrasenas nuevas no coinciden.")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="La nueva contrasena debe ser diferente a la actual.")
+
+    secret = _hash_password(payload.new_password)
+    await _db()["Users"].update_one(
+        {"_id": user["_id"]},
+        {"$set": {**secret, "updated_at": datetime.utcnow()}},
+    )
+    username = user.get("username")
+    for token, session in list(_sessions.items()):
+        if session.get("username") == username:
+            _sessions.pop(token, None)
     return {"ok": True}
 
 

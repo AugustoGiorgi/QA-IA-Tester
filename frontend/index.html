@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>QA Doc Analyzer</title>
   <link rel="stylesheet" href="/app/styles.css" />
-  <link rel="stylesheet" href="/app/dashboard.css?v=20260609-5" />
+  <link rel="stylesheet" href="/app/dashboard.css?v=20260609-6" />
 </head>
 <body class="app-shell">
   <aside class="sidebar">
@@ -23,12 +23,27 @@
         <h1 id="viewTitle">Inicio</h1>
         <p id="viewSubtitle" class="small muted">Panel operativo interno</p>
       </div>
-      <button id="mobileMenu" type="button" class="btn-secondary">Menú</button>
+      <div class="topbar-actions">
+        <button id="mobileMenu" type="button" class="btn-secondary">Menu</button>
+        <div class="profile-menu">
+          <button id="profileButton" type="button" class="profile-button" aria-expanded="false" aria-controls="profileDropdown">
+            <span id="profileInitials" class="profile-avatar"></span>
+            <span class="profile-button-copy">
+              <strong id="profileName"></strong>
+              <small id="profileRole"></small>
+            </span>
+            <span class="profile-chevron">v</span>
+          </button>
+          <div id="profileDropdown" class="profile-dropdown hidden">
+            <button id="changePasswordButton" type="button">Cambiar contrasena</button>
+          </div>
+        </div>
+      </div>
     </header>
     <section id="appView" class="view-host"></section>
   </main>
 
-  <script type="module" src="/app/js/home.js?v=20260609-5"></script>
+  <script type="module" src="/app/js/home.js?v=20260609-6"></script>
   <script type="module" src="/app/js/project-chat-widget.js"></script>
 </body>
 </html>

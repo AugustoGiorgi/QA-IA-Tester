@@ -1,4 +1,4 @@
-import { ROLE_LABELS, authFetch, authHeaders, getUser, logout, requireAuth } from './auth.js';
+import { ROLE_LABELS, authFetch, authHeaders, clearSession, getUser, logout, requireAuth } from './auth.js';
 
 const user = requireAuth();
 const sideNav = document.getElementById('sideNav');
@@ -60,6 +60,101 @@ function renderSidebar(activeId = 'inicio') {
     </button>
   `).join('');
   sideNav.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => navigate(btn.dataset.view)));
+}
+
+function renderProfileMenu() {
+  const current = getUser();
+  const displayName = current.full_name || current.username;
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase();
+  document.getElementById('profileInitials').textContent = initials || 'U';
+  document.getElementById('profileName').textContent = displayName;
+  document.getElementById('profileRole').textContent = ROLE_LABELS[current.role] || current.role;
+}
+
+function toggleProfileMenu(forceOpen) {
+  const dropdown = document.getElementById('profileDropdown');
+  const button = document.getElementById('profileButton');
+  const open = forceOpen ?? dropdown.classList.contains('hidden');
+  dropdown.classList.toggle('hidden', !open);
+  button.setAttribute('aria-expanded', String(open));
+}
+
+function openChangePasswordModal() {
+  toggleProfileMenu(false);
+  const modal = ensureModal();
+  document.getElementById('modalBody').innerHTML = `
+    <div class="password-modal">
+      <h2>Cambiar contrasena</h2>
+      <p class="small muted">Al guardar el cambio se cerrara tu sesion y deberas ingresar nuevamente.</p>
+      <form id="changePasswordForm" autocomplete="off">
+        <label>Contrasena actual
+          <input id="currentPassword" type="password" autocomplete="current-password" required />
+        </label>
+        <label>Nueva contrasena
+          <input id="newPassword" type="password" minlength="6" autocomplete="new-password" required />
+        </label>
+        <label>Repetir nueva contrasena
+          <input id="confirmPassword" type="password" minlength="6" autocomplete="new-password" required />
+        </label>
+        <div id="passwordChangeMsg" class="field-error"></div>
+        <div class="password-modal-actions">
+          <button id="cancelPasswordChange" type="button" class="btn-secondary">Cancelar</button>
+          <button type="submit">Cambiar contrasena</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.getElementById('cancelPasswordChange').addEventListener('click', closeModal);
+  document.getElementById('changePasswordForm').addEventListener('submit', saveNewPassword);
+  modal.classList.remove('hidden');
+  document.getElementById('currentPassword').focus();
+}
+
+async function saveNewPassword(event) {
+  event.preventDefault();
+  const msg = document.getElementById('passwordChangeMsg');
+  const currentPassword = document.getElementById('currentPassword').value;
+  const newPassword = document.getElementById('newPassword').value;
+  const confirmPassword = document.getElementById('confirmPassword').value;
+  msg.classList.remove('ok');
+  msg.textContent = '';
+
+  if (newPassword.length < 6) {
+    msg.textContent = 'La nueva contrasena debe tener al menos 6 caracteres.';
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    msg.textContent = 'Las contrasenas nuevas no coinciden.';
+    return;
+  }
+
+  try {
+    const res = await authFetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'No se pudo cambiar la contrasena.');
+    msg.classList.add('ok');
+    msg.textContent = 'Contrasena actualizada. Cerrando sesion...';
+    setTimeout(() => {
+      clearSession();
+      location.href = '/app/login.html';
+    }, 900);
+  } catch (err) {
+    msg.textContent = err.message;
+  }
 }
 
 async function navigate(id) {
@@ -960,8 +1055,16 @@ function escapeHtml(value = '') {
 
 if (user) {
   renderSidebar('inicio');
+  renderProfileMenu();
   renderHome().then(checkOverdueTasks);
 }
 
 document.getElementById('logoutBtn')?.addEventListener('click', logout);
 document.getElementById('mobileMenu')?.addEventListener('click', () => document.body.classList.toggle('sidebar-open'));
+document.getElementById('profileButton')?.addEventListener('click', event => {
+  event.stopPropagation();
+  toggleProfileMenu();
+});
+document.getElementById('profileDropdown')?.addEventListener('click', event => event.stopPropagation());
+document.getElementById('changePasswordButton')?.addEventListener('click', openChangePasswordModal);
+document.addEventListener('click', () => toggleProfileMenu(false));
