@@ -39,7 +39,8 @@ COLUMNS = [
 class QualityRecordIn(BaseModel):
     id_req: str
     requirement_name: str
-    design_time: float
+    design_time: Optional[float] = None
+    design_time_seconds: Optional[int] = None
     generated_cases: int
     ok_cases: int
     additional_qa_cases: int
@@ -121,11 +122,20 @@ def _payload(payload: QualityRecordIn, user: Dict[str, Any]) -> Dict[str, Any]:
         payload.additional_functional_cases,
         "Casos Adicionales Funcional",
     )
+    if payload.design_time_seconds is not None:
+        design_time_seconds = _non_negative_int(payload.design_time_seconds, "Tiempo de Diseno")
+    elif payload.design_time is not None:
+        # Compatibilidad con registros anteriores, donde el valor representaba minutos.
+        design_time_seconds = round(_non_negative_number(float(payload.design_time), "Tiempo de Diseno") * 60)
+    else:
+        raise HTTPException(status_code=400, detail="Tiempo de Diseno es obligatorio.")
+
     data = {
         "id_req": _clean_text(payload.id_req, "ID REQ"),
         "requirement_name": _clean_text(payload.requirement_name, "Nombre Requerimiento"),
         "qa_responsible": user["username"],
-        "design_time": _non_negative_number(float(payload.design_time), "Tiempo de Diseno"),
+        "design_time_seconds": design_time_seconds,
+        "design_time": round(design_time_seconds / 60, 2),
         "generated_cases": generated,
         "ok_cases": ok,
         "additional_qa_cases": additional_qa,
@@ -137,6 +147,8 @@ def _payload(payload: QualityRecordIn, user: Dict[str, Any]) -> Dict[str, Any]:
 
 def _public(doc: Dict[str, Any]) -> Dict[str, Any]:
     doc = dict(doc)
+    if "design_time_seconds" not in doc:
+        doc["design_time_seconds"] = round(float(doc.get("design_time") or 0) * 60)
     if "post_qa_review_quality_percent" not in doc and "post_review_quality_percent" in doc:
         doc["post_qa_review_quality_percent"] = doc.get("post_review_quality_percent")
     if "additional_functional_cases" not in doc:
@@ -234,10 +246,17 @@ async def export_records(user: Dict[str, Any] = Depends(current_user)):
 
     for doc in docs:
         public_doc = _public(doc)
-        ws.append([public_doc.get(key, "") for key, _ in COLUMNS])
+        values = []
+        for key, _ in COLUMNS:
+            if key == "design_time":
+                values.append(public_doc.get("design_time_seconds", 0) / 86400)
+            else:
+                values.append(public_doc.get(key, ""))
+        ws.append(values)
 
     percent_cols = [7, 9, 11]
     for row in ws.iter_rows(min_row=2):
+        row[3].number_format = '[m]" min "ss" seg"'
         for col in percent_cols:
             row[col - 1].number_format = '0.00"%"'
 

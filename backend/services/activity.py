@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from bson import ObjectId
@@ -58,7 +58,7 @@ async def record_activity(
                 "module": _clean(module, "general", 120),
                 "detail": _clean(detail, "", 1200),
                 "metadata": metadata or {},
-                "created_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
             }
         )
     except Exception:

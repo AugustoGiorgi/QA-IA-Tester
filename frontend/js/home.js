@@ -272,7 +272,7 @@ function qualityRow(record) {
       <td>${escapeHtml(record.id_req)}</td>
       <td>${escapeHtml(record.requirement_name)}</td>
       <td>${escapeHtml(record.qa_responsible)}</td>
-      <td>${escapeHtml(record.design_time)}</td>
+      <td>${formatDuration(record.design_time_seconds ?? Math.round(Number(record.design_time || 0) * 60))}</td>
       <td>${escapeHtml(record.generated_cases)}</td>
       <td>${escapeHtml(record.ok_cases)}</td>
       <td class="calc-cell">${formatPercent(record.ai_quality_percent)}</td>
@@ -301,6 +301,9 @@ function wireQualityRows(records) {
 
 function openQualityModal(record = null) {
   const isEdit = Boolean(record);
+  const designSeconds = Number(record?.design_time_seconds ?? Math.round(Number(record?.design_time || 0) * 60));
+  const designMinutes = Math.floor(designSeconds / 60);
+  const remainingSeconds = designSeconds % 60;
   const modal = ensureModal();
   document.getElementById('modalBody').innerHTML = `
     <h2>${isEdit ? 'Editar linea' : 'Crear linea'}</h2>
@@ -309,19 +312,22 @@ function openQualityModal(record = null) {
       <label>Nombre Requerimiento<input id="qualityName" type="text" value="${escapeHtml(record?.requirement_name || '')}" required /></label>
       <label>Responsable QA<input id="qualityQa" type="text" value="${escapeHtml(record?.qa_responsible || getUser().username)}" disabled /></label>
       <div class="form-grid two">
-        <label>Tiempo de Diseno<input id="qualityDesignTime" type="number" min="0" step="0.01" value="${escapeHtml(record?.design_time ?? '')}" required /></label>
+        <label>Tiempo de Diseno (minutos)<input id="qualityDesignMinutes" type="number" min="0" step="1" value="${isEdit ? designMinutes : ''}" required /></label>
+        <label>Segundos<input id="qualityDesignSeconds" type="number" min="0" max="59" step="1" value="${isEdit ? remainingSeconds : 0}" required /></label>
+      </div>
+      <div class="form-grid two">
         <label>Casos Generados<input id="qualityGenerated" type="number" min="0" step="1" value="${escapeHtml(record?.generated_cases ?? '')}" required /></label>
-      </div>
-      <div class="form-grid two">
         <label>Casos OK<input id="qualityOk" type="number" min="0" step="1" value="${escapeHtml(record?.ok_cases ?? '')}" required /></label>
+      </div>
+      <div class="form-grid two">
         <label>Casos Adicionales QA<input id="qualityAdditional" type="number" min="0" step="1" value="${escapeHtml(record?.additional_qa_cases ?? '')}" required /></label>
-      </div>
-      <div class="form-grid two">
         <label>Casos Adicionales Funcional<input id="qualityAdditionalFunctional" type="number" min="0" step="1" value="${escapeHtml(record?.additional_functional_cases ?? 0)}" required /></label>
-        <label>% de Calidad IA<input id="qualityAiPercent" class="readonly-calc" type="text" disabled /></label>
       </div>
       <div class="form-grid two">
+        <label>% de Calidad IA<input id="qualityAiPercent" class="readonly-calc" type="text" disabled /></label>
         <label>% de Calidad Post Revision QA<input id="qualityPostPercent" class="readonly-calc" type="text" disabled /></label>
+      </div>
+      <div class="form-grid two">
         <label>% de Calidad Post Revision Funcional<input id="qualityPostFunctionalPercent" class="readonly-calc" type="text" disabled /></label>
       </div>
       <div id="qualityModalMsg" class="field-error"></div>
@@ -366,6 +372,8 @@ async function saveQualityRecord(event, record) {
 }
 
 function readQualityForm() {
+  const designMinutes = Number(document.getElementById('qualityDesignMinutes').value);
+  const designSeconds = Number(document.getElementById('qualityDesignSeconds').value);
   const generated = Number(document.getElementById('qualityGenerated').value);
   const ok = Number(document.getElementById('qualityOk').value);
   const additional = Number(document.getElementById('qualityAdditional').value);
@@ -373,7 +381,7 @@ function readQualityForm() {
   return {
     id_req: document.getElementById('qualityIdReq').value.trim(),
     requirement_name: document.getElementById('qualityName').value.trim(),
-    design_time: Number(document.getElementById('qualityDesignTime').value),
+    design_time_seconds: (designMinutes * 60) + designSeconds,
     generated_cases: generated,
     ok_cases: ok,
     additional_qa_cases: additional,
@@ -386,7 +394,11 @@ function readQualityForm() {
 
 function validateQualityPayload(payload) {
   if (!payload.id_req || !payload.requirement_name) return 'ID REQ y Nombre Requerimiento son obligatorios.';
-  const nums = ['design_time', 'generated_cases', 'ok_cases', 'additional_qa_cases', 'additional_functional_cases'];
+  const minutes = Number(document.getElementById('qualityDesignMinutes')?.value);
+  const seconds = Number(document.getElementById('qualityDesignSeconds')?.value);
+  if (!Number.isInteger(minutes) || minutes < 0) return 'Los minutos deben ser un numero entero mayor o igual a 0.';
+  if (!Number.isInteger(seconds) || seconds < 0 || seconds > 59) return 'Los segundos deben estar entre 0 y 59.';
+  const nums = ['design_time_seconds', 'generated_cases', 'ok_cases', 'additional_qa_cases', 'additional_functional_cases'];
   if (nums.some(key => Number.isNaN(payload[key]) || payload[key] < 0)) return 'Los valores numericos no pueden ser negativos.';
   if (payload.generated_cases <= 0) return 'Casos Generados debe ser mayor a 0.';
   if (payload.ok_cases + payload.additional_qa_cases <= 0) return 'Casos OK + Casos Adicionales QA debe ser mayor a 0.';
@@ -897,8 +909,27 @@ function openOverdueTasksModal(tasks) {
 
 function formatDate(value) {
   if (!value) return '';
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-AR');
+  const raw = String(value);
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? raw : `${raw}Z`;
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.day}/${parts.month}/${parts.year} · ${parts.hour}:${parts.minute}`;
+}
+
+function formatDuration(value) {
+  const totalSeconds = Math.max(0, Math.round(Number(value) || 0));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes} min ${String(seconds).padStart(2, '0')} seg`;
 }
 
 function formatPercent(value) {
