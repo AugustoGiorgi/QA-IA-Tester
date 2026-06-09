@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -31,6 +31,21 @@ def _public(doc: Dict[str, Any]) -> Dict[str, Any]:
     doc = dict(doc)
     doc["id"] = str(doc.pop("_id"))
     return doc
+
+
+def _latest_task_activity(docs: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+    result = []
+    seen_tasks = set()
+    for doc in docs:
+        task_id = str((doc.get("metadata") or {}).get("task_id") or "").strip()
+        if doc.get("module") == "tareas" and task_id:
+            if task_id in seen_tasks:
+                continue
+            seen_tasks.add(task_id)
+        result.append(doc)
+        if len(result) >= limit:
+            break
+    return result
 
 
 async def _ensure_indexes() -> None:
@@ -104,7 +119,11 @@ async def list_activity(
             {"module": {"$regex": term, "$options": "i"}},
         ]
     query["action"] = {"$nin": ["Click", "Navegacion", "Playwright tab"], "$not": {"$regex": "^API "}}
-    docs = await _db()[COLLECTION].find(query).sort("created_at", DESCENDING).to_list(limit)
+    # Se consulta un margen amplio porque varias acciones de una misma tarea
+    # se compactan en una sola entrada: siempre queda visible la mas reciente.
+    fetch_limit = min(max(limit * 10, 500), 5000)
+    raw_docs = await _db()[COLLECTION].find(query).sort("created_at", DESCENDING).to_list(fetch_limit)
+    docs = _latest_task_activity(raw_docs, limit)
     scope = {} if can_view_all else {"username": user["username"]}
     users = await _db()[COLLECTION].distinct("username", scope)
     modules = await _db()[COLLECTION].distinct("module", scope)
