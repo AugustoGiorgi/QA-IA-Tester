@@ -714,12 +714,15 @@ function truncateText(value, max = 140) {
   return text.length > max ? `${text.slice(0, max - 1)}...` : text;
 }
 
-function historyItem(actor, action, detail, at) {
+function historyItem(actor, action, detail, at, showCommentDetail = false) {
+  const isCommentEvent = !showCommentDetail && String(action || '').toLowerCase().includes('comentario');
+  const displayAction = isCommentEvent ? 'Agreg\u00f3 un comentario' : action;
+  const displayDetail = isCommentEvent ? '' : detail;
   return `
     <div class="history-item">
       <strong>${escapeHtml(actor || '-')}</strong>
-      <span>${escapeHtml(action || '')} · ${formatDate(at)}</span>
-      ${detail ? `<p>${escapeHtml(detail)}</p>` : ''}
+      <span>${escapeHtml(displayAction || '')} &middot; ${formatDate(at)}</span>
+      ${displayDetail ? `<p>${escapeHtml(displayDetail)}</p>` : ''}
     </div>
   `;
 }
@@ -847,7 +850,7 @@ async function openTaskDetailModal(taskId, users) {
       </div>
       <section class="task-detail-section">
         <h3>Comentarios</h3>
-        <div class="history-list">${comments.map(item => historyItem(item.author, 'comentario', item.text, item.at)).join('') || '<p class="small muted">Sin comentarios.</p>'}</div>
+        <div class="history-list">${comments.map(item => historyItem(item.author, 'Comentario', item.text, item.at, true)).join('') || '<p class="small muted">Sin comentarios.</p>'}</div>
       </section>
       <section class="task-detail-section">
         <h3>Historial</h3>

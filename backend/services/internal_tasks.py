@@ -132,7 +132,16 @@ def _public_task(task: Dict[str, Any]) -> Dict[str, Any]:
     task["date_from"] = task.get("date_from") or ""
     task["estimated_until"] = task.get("estimated_until") or ""
     task.setdefault("comments", [])
-    task.setdefault("history", [])
+    task["history"] = [
+        {
+            **entry,
+            "action": "Agreg\u00f3 un comentario",
+            "detail": "",
+        }
+        if "comentario" in str(entry.get("action", "")).lower()
+        else entry
+        for entry in task.get("history", [])
+    ]
     task.setdefault("bugs", [])
     task["id"] = str(task.pop("_id"))
     return task
@@ -425,7 +434,7 @@ async def add_comment(task_id: str, payload: CommentIn, user: Dict[str, Any] = D
     _require_task_role(user)
     task = await _task_or_404(task_id, user)
     comment = {"author": user["username"], "text": _clean_text(payload.text), "important": payload.important, "at": _now()}
-    history = task.get("history", []) + [_history(user["username"], "agregÃ³ comentario", comment["text"][:160])]
+    history = task.get("history", []) + [_history(user["username"], "Agreg\u00f3 un comentario")]
     await _db()["InternalTasks"].update_one({"_id": task["_id"]}, {"$push": {"comments": comment}, "$set": {"history": history, "updated_at": _now()}})
     task["history"] = history
     if payload.important:
