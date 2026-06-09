@@ -2,7 +2,7 @@
 
 import os
 import smtplib
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -236,7 +236,11 @@ async def summary(user: Dict[str, Any] = Depends(current_user)):
     }
     db = _db()
     tasks = await db["InternalTasks"].find(query).sort("updated_at", DESCENDING).limit(8).to_list(8)
-    notifications = await db["TaskNotifications"].find({"username": user["username"]}).sort("created_at", DESCENDING).limit(8).to_list(8)
+    notification_cutoff = _now() - timedelta(days=7)
+    notifications = await db["TaskNotifications"].find({
+        "username": user["username"],
+        "created_at": {"$gte": notification_cutoff},
+    }).sort("created_at", DESCENDING).limit(50).to_list(50)
     counts = {
         status: await db["InternalTasks"].count_documents({**query, "status": status})
         for status in TASK_STATUSES

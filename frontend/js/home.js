@@ -726,7 +726,7 @@ function historyItem(actor, action, detail, at) {
 
 function renderNotifications(notifications) {
   if (!notifications.length) return '<p class="small muted">Sin notificaciones recientes.</p>';
-  return `<div class="notification-list">${notifications.map(n => `
+  return `<div class="notification-list dashboard-notification-list">${notifications.map(n => `
     <article class="notification ${n.read ? '' : 'unread'}">
       <strong>${escapeHtml(n.title)}</strong>
       <p class="small muted">${escapeHtml(n.action || '')} · ${formatDate(n.created_at)}</p>
