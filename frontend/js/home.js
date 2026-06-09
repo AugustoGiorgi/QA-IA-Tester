@@ -13,6 +13,7 @@ let pendingTaskOpenId = '';
 
 const tools = [
   { id: 'inicio', label: 'Inicio', global: true },
+  { id: 'movimientos', roles: ['qa', 'funcional', 'lider'], label: 'Movimientos' },
   { id: 'tareas', roles: TASK_ROLES, label: 'Tareas' },
   { id: 'registro-ia', roles: TASK_ROLES, label: 'Registro IA' },
   { id: 'entendimiento', roles: ['qa', 'lider'], label: 'Entendimiento', href: '/app/entendimiento.html' },
@@ -22,7 +23,6 @@ const tools = [
   { id: 'funcional', roles: ['funcional'], label: 'Doc. Funcional', href: '/app/chat-funcional.html' },
   { id: 'importacion', roles: ['lider'], label: 'Importacion', href: '/app/importacion.html' },
   { id: 'usuarios', roles: ['lider'], label: 'Usuarios', href: '/app/usuarios.html?v=20260519-2' },
-  { id: 'movimientos', roles: ['qa', 'funcional', 'lider'], label: 'Movimientos' },
 ];
 
 const stateLabels = {
