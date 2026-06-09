@@ -762,9 +762,17 @@ async function openTaskDetailModal(taskId, users) {
 }
 
 async function openEditTaskModal(taskId, users) {
-  const task = (await getJson('/api/internal-tasks/tasks')).tasks.find(item => item.id === taskId);
-  const qaUsers = users.filter(u => u.role === 'qa');
+  const [taskData, usersData] = await Promise.all([
+    getJson('/api/internal-tasks/tasks'),
+    Array.isArray(users) && users.length
+      ? Promise.resolve({ users })
+      : getJson('/api/internal-tasks/users'),
+  ]);
+  const task = (taskData.tasks || []).find(item => item.id === taskId);
+  if (!task) return;
+  const qaUsers = (usersData.users || []).filter(u => u.role === 'qa');
   const modal = ensureModal();
+  modal.querySelector('.modal-card')?.classList.add('task-modal-card');
   document.getElementById('modalBody').innerHTML = `
     <h2>Editar tarea</h2>
     <form id="editTaskForm" class="task-edit-form">
