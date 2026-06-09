@@ -253,6 +253,77 @@ body.app-shell .password-modal-actions button {
   min-width: 130px;
 }
 
+.password-input-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.password-input-wrap > input {
+  width: 100% !important;
+  padding-right: 48px !important;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  z-index: 2;
+  display: inline-grid !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0 !important;
+  border-radius: 6px !important;
+  color: #94a3b8 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: #ffffff !important;
+  background: rgba(37, 99, 235, 0.18) !important;
+}
+
+.password-eye-icon {
+  position: relative;
+  display: block;
+  width: 19px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-radius: 50% / 60%;
+}
+
+.password-eye-icon::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  content: "";
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.password-toggle.is-visible .password-eye-icon::after {
+  position: absolute;
+  top: 50%;
+  left: -3px;
+  width: 23px;
+  height: 2px;
+  content: "";
+  transform: rotate(-42deg);
+  border-radius: 2px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px var(--shell-panel);
+}
+
 body.app-shell #mobileMenu {
   display: none;
   width: auto;
