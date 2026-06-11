@@ -5,6 +5,7 @@ import base64
 import re
 import shutil
 import subprocess
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -313,8 +314,22 @@ def _audit_prompt(payload: Dict[str, str], generated: Dict[str, Any]) -> List[Di
     ]
 
 
-def _deterministic_warnings(code: str, payload: Dict[str, str]) -> List[str]:
+def _normalized(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    return "".join(char for char in text if not unicodedata.combining(char)).lower()
+
+
+def _deterministic_findings(
+    code: str,
+    payload: Dict[str, str],
+    selectors: Optional[Dict[str, str]] = None,
+    test_data: Optional[Dict[str, str]] = None,
+) -> Dict[str, List[str]]:
+    critical: List[str] = []
     warnings: List[str] = []
+    manual: List[str] = []
+    selectors = {str(key): str(value) for key, value in (selectors or {}).items()}
+    test_data = {str(key): str(value) for key, value in (test_data or {}).items()}
     for needle, message in (
         ("waitForTimeout(", "El codigo contiene waitForTimeout."),
         ("page.click('body')", "El codigo hace click sobre body para perder foco."),
@@ -324,8 +339,76 @@ def _deterministic_warnings(code: str, payload: Dict[str, str]) -> List[str]:
     ):
         if needle in code:
             warnings.append(message)
-    if re.search(r"\.fill\(\s*selectors\.\w*(?:button|icon)\b", code, re.I):
-        warnings.append("Se detecto fill sobre un selector cuyo nombre parece corresponder a un boton o icono.")
+
+    selector_types: Dict[str, str] = {}
+    for key, value in selectors.items():
+        match = re.match(r"\s*(input|button|select|textarea|tab)\b", value, re.I)
+        selector_types[key] = match.group(1).lower() if match else ""
+        if selector_types[key] == "tab":
+            critical.append(f"El selector {key} usa la etiqueta HTML inexistente o dudosa 'tab'.")
+
+    for action, key in re.findall(r"\.(fill|selectOption|click)\(\s*selectors\.(\w+)", code):
+        kind = selector_types.get(key, "")
+        lowered_key = key.lower()
+        if action == "fill" and (
+            kind in {"button", "select", "tab"}
+            or any(token in lowered_key for token in ("button", "icon", "tab"))
+        ):
+            critical.append(f"Se usa fill sobre {key}, que parece ser {kind or 'un control no editable'}.")
+        if action == "selectOption" and (
+            kind not in {"", "select"}
+            or any(token in lowered_key for token in ("input", "button", "icon", "tab"))
+        ):
+            critical.append(f"Se usa selectOption sobre {key}, pero su selector no corresponde a un select.")
+        if action == "click" and kind in {"input", "textarea"}:
+            warnings.append(f"Se hace click sobre {key}; verifica si la accion correcta era fill.")
+
+    source = _normalized(
+        " ".join(
+            str(payload.get(key, ""))
+            for key in ("description", "observations", "codegen", "selector_context")
+        )
+    )
+    combined_output = _normalized(code + " " + json.dumps(test_data, ensure_ascii=False))
+    required_concepts = {
+        "poliza": ("poliza", "policy"),
+        "cliente": ("cliente", "client"),
+        "usuario": ("usuario", "username"),
+        "contrasena": ("contrasena", "password"),
+    }
+    for label, aliases in required_concepts.items():
+        if any(alias in source for alias in aliases) and not any(alias in combined_output for alias in aliases):
+            critical.append(f"El flujo solicita {label}, pero no existe en testData ni en el codigo.")
+
+    if "toLocaleDateString()" in code:
+        warnings.append("La fecha usa el locale del servidor y puede cambiar de formato entre ambientes.")
+
+    expected_source = _normalized(payload.get("description", "") + " " + payload.get("observations", ""))
+    asserted_literals = re.findall(r"getByText\(\s*['\"]([^'\"]{8,120})['\"]", code, re.I)
+    asserted_literals.extend(re.findall(r"locator\(\s*['\"]text=([^'\"]{8,120})['\"]", code, re.I))
+    for literal in asserted_literals:
+        normalized_literal = _normalized(literal)
+        if normalized_literal and normalized_literal not in expected_source:
+            critical.append(f"La validacion final parece inventada y no figura en el caso: '{literal}'.")
+
+    repeated_selectors = re.findall(r"page\.click\(\s*selectors\.(\w+)", code)
+    for key in set(repeated_selectors):
+        count = repeated_selectors.count(key)
+        if count >= 3 and not re.search(rf"(?:modal|dialog|section).*selectors\.{re.escape(key)}", code, re.I | re.S):
+            warnings.append(
+                f"El selector {key} se reutiliza {count} veces sin quedar claramente acotado a cada ventana."
+            )
+
+    technical_context = bool(_clean(payload.get("codegen")) or _clean(payload.get("selector_context")))
+    provisional = [
+        key for key, value in selectors.items()
+        if "data-testid" in value and value not in payload.get("selector_context", "")
+    ]
+    if provisional and not technical_context:
+        manual.append(
+            f"Confirmar o reemplazar {len(provisional)} selectores data-testid provisionales con selectores reales de VT."
+        )
+
     description_steps = {
         int(value)
         for value in re.findall(r"(?m)^\s*(\d{1,2})\s*[\)\.-]", payload.get("description", ""))
@@ -333,8 +416,50 @@ def _deterministic_warnings(code: str, payload: Dict[str, str]) -> List[str]:
     code_steps = {int(value) for value in re.findall(r"//\s*Paso\s+(\d{1,2})", code, re.I)}
     missing = sorted(description_steps - code_steps)
     if missing:
-        warnings.append("Faltan referencias explicitas a los pasos: " + ", ".join(map(str, missing)) + ".")
-    return warnings
+        critical.append("Faltan referencias explicitas a los pasos: " + ", ".join(map(str, missing)) + ".")
+    return {
+        "critical": list(dict.fromkeys(critical)),
+        "warnings": list(dict.fromkeys(warnings)),
+        "manual": list(dict.fromkeys(manual)),
+    }
+
+
+def _repair_generated(
+    payload: Dict[str, str],
+    generated: Dict[str, Any],
+    findings: Dict[str, List[str]],
+) -> Dict[str, Any]:
+    prompt = {
+        "request": payload,
+        "candidate": generated,
+        "mandatory_fixes": findings["critical"],
+        "additional_warnings": findings["warnings"],
+    }
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Sos el reparador final de un spec Playwright. Corrige obligatoriamente todos los defectos "
+                    "indicados. No ocultes un defecto cambiando solamente las notas. Si falta informacion real, "
+                    "deja una variable TODO y una accion tecnicamente compatible. No inventes assertions. "
+                    + _generation_rules()
+                    + " Devuelve JSON con generated_code, selectors, test_data, ai_notes, covered_steps, "
+                    "manual_actions y warnings."
+                ),
+            },
+            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+        ],
+        temperature=0,
+        max_tokens=16000,
+        top_p=1,
+        response_format={"type": "json_object"},
+    )
+    repaired = _parse_ai_json(response.choices[0].message.content or "")
+    if not repaired or not repaired.get("generated_code"):
+        raise ValueError("La reparacion final no devolvio codigo valido.")
+    return repaired
 
 
 def _audit_generated(payload: Dict[str, str], generated: Dict[str, Any]) -> Dict[str, Any]:
@@ -351,33 +476,67 @@ def _audit_generated(payload: Dict[str, str], generated: Dict[str, Any]) -> Dict
         if not audited or not audited.get("generated_code"):
             raise ValueError("La auditoria no devolvio codigo valido.")
         code = _clean(audited.get("generated_code"), MAX_CODE_LENGTH)
+        selectors = audited.get("selectors") or _extract_json_object(code, "selectors") or generated.get("selectors", {})
+        test_data = audited.get("test_data") or _extract_json_object(code, "testData") or generated.get("test_data", {})
+        findings = _deterministic_findings(code, payload, selectors, test_data)
+        if findings["critical"]:
+            repaired = _repair_generated(
+                payload,
+                {
+                    "generated_code": code,
+                    "selectors": selectors,
+                    "test_data": test_data,
+                    "ai_notes": audited.get("ai_notes", []),
+                },
+                findings,
+            )
+            code = _clean(repaired.get("generated_code"), MAX_CODE_LENGTH)
+            selectors = repaired.get("selectors") or _extract_json_object(code, "selectors") or selectors
+            test_data = repaired.get("test_data") or _extract_json_object(code, "testData") or test_data
+            audited = {**audited, **repaired}
+            findings = _deterministic_findings(code, payload, selectors, test_data)
+            if findings["critical"]:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "La IA genero codigo con errores tecnicos que no pudieron repararse automaticamente: "
+                        + " | ".join(findings["critical"][:4])
+                    ),
+                )
+
         warnings = [str(item) for item in audited.get("warnings", [])]
-        warnings.extend(_deterministic_warnings(code, payload))
+        warnings.extend(findings["warnings"])
+        warnings.extend(f"ERROR PENDIENTE: {item}" for item in findings["critical"])
+        manual_actions = [str(item) for item in audited.get("manual_actions", [])]
+        manual_actions.extend(findings["manual"])
         try:
             score = int(audited.get("quality_score", 0))
         except (TypeError, ValueError):
-            score = 0
+            score = 85
+        if findings["critical"]:
+            score = min(score, 35)
+        elif findings["manual"]:
+            score = min(score, 75)
         return {
             "generated_code": code,
-            "selectors": audited.get("selectors") or _extract_json_object(code, "selectors") or generated.get("selectors", {}),
-            "test_data": audited.get("test_data") or _extract_json_object(code, "testData") or generated.get("test_data", {}),
+            "selectors": selectors,
+            "test_data": test_data,
             "ai_notes": [str(item) for item in audited.get("ai_notes", generated.get("ai_notes", []))],
             "quality_score": max(0, min(100, score)),
             "covered_steps": [str(item) for item in audited.get("covered_steps", [])],
-            "manual_actions": [str(item) for item in audited.get("manual_actions", [])],
+            "manual_actions": list(dict.fromkeys(manual_actions)),
             "warnings": list(dict.fromkeys(warnings)),
         }
+    except HTTPException:
+        raise
     except Exception as exc:
-        generated["quality_score"] = 0
-        generated["covered_steps"] = []
-        generated["manual_actions"] = [
-            "La auditoria automatica no pudo completarse; revisa el spec antes de ejecutarlo."
-        ]
-        generated["warnings"] = _deterministic_warnings(generated.get("generated_code", ""), payload)
-        generated["ai_notes"] = list(generated.get("ai_notes", [])) + [
-            f"La generacion se completo, pero fallo la segunda auditoria ({type(exc).__name__})."
-        ]
-        return generated
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "El codigo fue generado, pero no pudo superar la auditoria automatica. "
+                f"No se guardo un resultado sin revisar ({type(exc).__name__})."
+            ),
+        ) from exc
 
 
 def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None) -> Dict[str, Any]:
