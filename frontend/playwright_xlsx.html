@@ -365,38 +365,8 @@
     }
 
     .pw-quality {
-      display: grid;
-      grid-template-columns: 120px 1fr;
-      gap: 16px;
       padding: 18px 20px;
       border-top: 1px solid #22324f;
-    }
-
-    .pw-score {
-      display: grid;
-      place-content: center;
-      min-height: 100px;
-      border: 1px solid #2563eb;
-      border-radius: 8px;
-      background: rgba(37, 99, 235, 0.12);
-      text-align: center;
-    }
-
-    .pw-score strong {
-      color: #f8fafc;
-      font-size: 2rem;
-    }
-
-    .pw-review-status {
-      margin-top: 6px;
-      color: #fbbf24;
-      font-size: 0.78rem;
-      font-weight: 800;
-      text-transform: uppercase;
-    }
-
-    .pw-review-status.ready {
-      color: #4ade80;
     }
 
     .pw-review-list {
@@ -444,9 +414,6 @@
       .pw-grid,
       .pw-two,
       .pw-vars,
-      .pw-quality {
-        grid-template-columns: 1fr;
-      }
       .pw-variable-row {
         grid-template-columns: 1fr;
       }
@@ -538,11 +505,6 @@
             <button id="pwApplyVariables" class="pw-btn secondary" type="button" disabled>Aplicar variables al codigo</button>
           </div>
           <div class="pw-quality">
-            <div class="pw-score">
-              <strong id="pwQualityScore">-</strong>
-              <span class="pw-muted">Calidad IA</span>
-              <span id="pwReviewStatus" class="pw-review-status"></span>
-            </div>
             <div>
               <h2>Revision automatica</h2>
               <p class="pw-muted" id="pwCoverage">Sin generacion activa.</p>
@@ -593,6 +555,6 @@
     </section>
   </main>
 
-  <script type="module" src="/app/js/playwright_xlsx.js?v=20260611-3"></script>
+  <script type="module" src="/app/js/playwright_xlsx.js?v=20260611-4"></script>
 </body>
 </html>

@@ -198,37 +198,48 @@ def _parse_ai_json(raw: str) -> Optional[Dict[str, Any]]:
             return None
 
 
-def _video_duration(video_path: Path) -> Optional[float]:
-    if not shutil.which("ffprobe"):
+def _ffmpeg_executable() -> Optional[str]:
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
         return None
+
+
+def _video_duration(video_path: Path, ffmpeg_executable: str) -> Optional[float]:
     try:
         result = subprocess.run(
-            [
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1", str(video_path),
-            ],
-            check=True,
+            [ffmpeg_executable, "-i", str(video_path)],
             capture_output=True,
             text=True,
             timeout=20,
         )
-        return max(float(result.stdout.strip()), 1.0)
+        match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
+        if not match:
+            return None
+        hours, minutes, seconds = match.groups()
+        return max((int(hours) * 3600) + (int(minutes) * 60) + float(seconds), 1.0)
     except Exception:
         return None
 
 
 def _extract_video_frames(video_path: Optional[Path]) -> List[Path]:
-    if not video_path or not video_path.exists() or not shutil.which("ffmpeg"):
+    ffmpeg_executable = _ffmpeg_executable()
+    if not video_path or not video_path.exists() or not ffmpeg_executable:
         return []
     stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
     out_dir = FRAME_DIR / stamp
     out_dir.mkdir(parents=True, exist_ok=True)
     pattern = str(out_dir / "frame_%03d.jpg")
-    interval = max((_video_duration(video_path) or 72) / MAX_VIDEO_FRAMES, 2)
+    interval = max((_video_duration(video_path, ffmpeg_executable) or 72) / MAX_VIDEO_FRAMES, 2)
     try:
         subprocess.run(
             [
-                "ffmpeg",
+                ffmpeg_executable,
                 "-y",
                 "-i",
                 str(video_path),

@@ -134,10 +134,6 @@ function setRecord(record) {
   renderVariableEditor('pwSelectors', record?.selectors, 'selector');
   renderVariableEditor('pwData', record?.test_data, 'data');
   $('pwNotes').innerHTML = (record?.ai_notes || []).map(note => `<p>${escapeHtml(note)}</p>`).join('') || '<span class="pw-muted">Sin notas.</span>';
-  $('pwQualityScore').textContent = record ? `${Number(record.quality_score || 0)}%` : '-';
-  const reviewStatus = record?.review_status || (record ? 'needs_review' : '');
-  $('pwReviewStatus').textContent = reviewStatus === 'ready' ? 'Listo' : reviewStatus ? 'Borrador para revisar' : '';
-  $('pwReviewStatus').classList.toggle('ready', reviewStatus === 'ready');
   const covered = Array.isArray(record?.covered_steps) ? record.covered_steps : [];
   $('pwCoverage').textContent = covered.length
     ? `Pasos cubiertos por la revision: ${covered.join(', ')}`
