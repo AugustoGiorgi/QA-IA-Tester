@@ -313,6 +313,64 @@
       padding: 0 20px 20px;
     }
 
+    .pw-technical {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid #22324f;
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.48);
+    }
+
+    .pw-technical summary {
+      cursor: pointer;
+      color: #dbeafe;
+      font-weight: 800;
+    }
+
+    .pw-quality {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 16px;
+      padding: 18px 20px;
+      border-top: 1px solid #22324f;
+    }
+
+    .pw-score {
+      display: grid;
+      place-content: center;
+      min-height: 100px;
+      border: 1px solid #2563eb;
+      border-radius: 8px;
+      background: rgba(37, 99, 235, 0.12);
+      text-align: center;
+    }
+
+    .pw-score strong {
+      color: #f8fafc;
+      font-size: 2rem;
+    }
+
+    .pw-review-list {
+      display: grid;
+      gap: 8px;
+      margin: 8px 0 14px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .pw-review-list li {
+      padding: 9px 11px;
+      border-left: 3px solid #f59e0b;
+      background: rgba(245, 158, 11, 0.08);
+      color: #dbeafe;
+    }
+
+    .pw-review-list.ok li {
+      border-color: #22c55e;
+      background: rgba(34, 197, 94, 0.08);
+    }
+
     .pw-upload-box {
       border: 1px dashed rgba(96, 165, 250, 0.42);
       border-radius: 8px;
@@ -337,7 +395,8 @@
       .pw-shell { padding: 18px; }
       .pw-grid,
       .pw-two,
-      .pw-vars {
+      .pw-vars,
+      .pw-quality {
         grid-template-columns: 1fr;
       }
       .pw-form { position: static; }
@@ -386,8 +445,18 @@
           </div>
           <div id="videoMode" class="pw-mode-panel hidden">
             <label>Video del paso a paso<input id="pwVideo" type="file" accept=".mp4,.webm,.mov,.mkv" /></label>
+            <label>Descripcion complementaria<textarea id="pwVideoDescription" placeholder="Detalla datos, decisiones o pasos que no se distingan claramente en el video"></textarea></label>
           </div>
           <label>Observaciones<textarea id="pwObservations" placeholder="Aclaraciones, datos particulares, validaciones o selectores conocidos"></textarea></label>
+          <details class="pw-technical">
+            <summary>Contexto tecnico opcional</summary>
+            <label>Codigo de Playwright Codegen
+              <textarea id="pwCodegen" placeholder="Pega aca el codigo capturado con npx playwright codegen"></textarea>
+            </label>
+            <label>Selectores o estructura conocida
+              <textarea id="pwSelectorContext" placeholder="IDs, labels, data-testid, iframes o fragmentos HTML conocidos"></textarea>
+            </label>
+          </details>
           <button id="pwGenerate" class="pw-btn" type="submit">Generar codigo</button>
           <div id="pwStatus" class="pw-status"></div>
         </form>
@@ -400,6 +469,7 @@
           <textarea id="pwCode" class="pw-code" spellcheck="false" placeholder="El spec generado aparece aca..."></textarea>
           <div class="pw-actions">
             <button id="pwSave" class="pw-btn" type="button" disabled>Guardar cambios</button>
+            <button id="pwAudit" class="pw-btn secondary" type="button" disabled>Volver a auditar</button>
             <button id="pwCopy" class="pw-btn secondary" type="button" disabled>Copiar</button>
             <button id="pwDownload" class="pw-btn secondary" type="button" disabled>Descargar .spec.ts</button>
           </div>
@@ -411,6 +481,20 @@
             <div>
               <h2>Datos</h2>
               <pre id="pwData">{}</pre>
+            </div>
+          </div>
+          <div class="pw-quality">
+            <div class="pw-score">
+              <strong id="pwQualityScore">-</strong>
+              <span class="pw-muted">Calidad IA</span>
+            </div>
+            <div>
+              <h2>Revision automatica</h2>
+              <p class="pw-muted" id="pwCoverage">Sin generacion activa.</p>
+              <h3>Pendientes manuales</h3>
+              <ul id="pwManualActions" class="pw-review-list"></ul>
+              <h3>Advertencias</h3>
+              <ul id="pwWarnings" class="pw-review-list"></ul>
             </div>
           </div>
           <div class="pw-library pw-notes">
@@ -454,6 +538,6 @@
     </section>
   </main>
 
-  <script type="module" src="/app/js/playwright_xlsx.js?v=20260602-2"></script>
+  <script type="module" src="/app/js/playwright_xlsx.js?v=20260611-1"></script>
 </body>
 </html>

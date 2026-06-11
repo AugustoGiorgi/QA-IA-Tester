@@ -22,6 +22,15 @@ function fmtDate(value) {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-AR');
 }
 
+function renderReviewList(id, items, emptyText, ok = false) {
+  const list = $(id);
+  const values = Array.isArray(items) ? items.filter(Boolean) : [];
+  list.classList.toggle('ok', ok || !values.length);
+  list.innerHTML = values.length
+    ? values.map(item => `<li>${escapeHtml(item)}</li>`).join('')
+    : `<li>${escapeHtml(emptyText)}</li>`;
+}
+
 function switchTab(tab) {
   document.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   document.querySelectorAll('.pw-tab').forEach(section => section.classList.add('pw-hidden'));
@@ -35,7 +44,23 @@ function setRecord(record) {
   $('pwSelectors').textContent = JSON.stringify(record?.selectors || {}, null, 2);
   $('pwData').textContent = JSON.stringify(record?.test_data || {}, null, 2);
   $('pwNotes').innerHTML = (record?.ai_notes || []).map(note => `<p>${escapeHtml(note)}</p>`).join('') || '<span class="pw-muted">Sin notas.</span>';
+  $('pwQualityScore').textContent = record ? `${Number(record.quality_score || 0)}%` : '-';
+  const covered = Array.isArray(record?.covered_steps) ? record.covered_steps : [];
+  $('pwCoverage').textContent = covered.length
+    ? `Pasos cubiertos por la revision: ${covered.join(', ')}`
+    : 'La cobertura no pudo determinarse automaticamente.';
+  renderReviewList(
+    'pwManualActions',
+    record?.manual_actions,
+    'No se detectaron pendientes manuales adicionales.',
+  );
+  renderReviewList(
+    'pwWarnings',
+    record?.warnings,
+    'La revision no detecto patrones de riesgo.',
+  );
   $('pwSave').disabled = !record;
+  $('pwAudit').disabled = !record;
   $('pwCopy').disabled = !record;
   $('pwDownload').disabled = !record;
 }
@@ -53,15 +78,23 @@ async function generateAi(event) {
     fd.append('module', $('pwModule').value.trim());
     fd.append('initial_url', $('pwUrl').value.trim());
     fd.append('execution_role', $('pwRole').value.trim());
-    fd.append('description', $('pwDescription').value.trim());
+    fd.append('description', mode === 'video' ? $('pwVideoDescription').value.trim() : $('pwDescription').value.trim());
     fd.append('observations', $('pwObservations').value.trim());
+    fd.append('codegen', $('pwCodegen').value.trim());
+    fd.append('selector_context', $('pwSelectorContext').value.trim());
     if (mode === 'video' && $('pwVideo').files.length) fd.append('video', $('pwVideo').files[0]);
 
     const res = await authFetch('/api/playwright/ai/generate', { method: 'POST', body: fd });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'No se pudo generar el codigo.');
     setRecord(data.record);
-    setStatus('Codigo generado y guardado en la biblioteca.', true);
+    const pending = Array.isArray(data.record?.manual_actions) ? data.record.manual_actions.length : 0;
+    setStatus(
+      pending
+        ? `Codigo generado, auditado y guardado. Quedan ${pending} datos tecnicos para completar.`
+        : 'Codigo generado, auditado y guardado en la biblioteca.',
+      true,
+    );
     await loadLibrary(false);
   } catch (err) {
     setStatus(err.message || 'Error al generar.');
@@ -86,6 +119,31 @@ async function saveCurrent() {
     await loadLibrary(false);
   } catch (err) {
     setStatus(err.message || 'Error al guardar.');
+  }
+}
+
+async function auditCurrent() {
+  if (!currentRecord) return;
+  setStatus('Guardando y auditando nuevamente el codigo...');
+  $('pwAudit').disabled = true;
+  try {
+    const saveRes = await authFetch(`/api/playwright/ai/generated/${currentRecord.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ generated_code: $('pwCode').value }),
+    });
+    const saveData = await saveRes.json().catch(() => ({}));
+    if (!saveRes.ok) throw new Error(saveData.detail || 'No se pudo guardar antes de auditar.');
+    const res = await authFetch(`/api/playwright/ai/generated/${currentRecord.id}/audit`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'No se pudo auditar el codigo.');
+    setRecord(data.record);
+    setStatus('Codigo corregido y recalificado por la auditoria automatica.', true);
+    await loadLibrary(false);
+  } catch (err) {
+    setStatus(err.message || 'Error al auditar.');
+  } finally {
+    $('pwAudit').disabled = !currentRecord;
   }
 }
 
@@ -207,6 +265,7 @@ $('pwMode')?.addEventListener('change', () => {
 });
 $('aiForm')?.addEventListener('submit', generateAi);
 $('pwSave')?.addEventListener('click', saveCurrent);
+$('pwAudit')?.addEventListener('click', auditCurrent);
 $('pwCopy')?.addEventListener('click', async () => {
   await navigator.clipboard.writeText($('pwCode').value);
   setStatus('Codigo copiado.', true);

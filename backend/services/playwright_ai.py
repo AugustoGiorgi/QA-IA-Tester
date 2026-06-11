@@ -40,6 +40,10 @@ class GeneratedUpdateIn(BaseModel):
     ai_notes: Optional[List[str]] = None
 
 
+MAX_CODE_LENGTH = 80000
+MAX_VIDEO_FRAMES = 12
+
+
 def _clean(value: Optional[str], max_len: int = 4000) -> str:
     return ((value or "").replace("\x00", "").strip())[:max_len]
 
@@ -133,23 +137,35 @@ test.describe('{spec_title}', () => {{
     }
 
 
+def _generation_rules() -> str:
+    return (
+        "Genera TypeScript con @playwright/test completo, mantenible y ejecutable. "
+        "Transforma TODOS los pasos funcionales identificables en acciones trazables con comentarios // Paso N. "
+        "Conserva el orden e incluye login, navegacion, modales, dialogs, iframes, pestanas, agendas, tablas, "
+        "autocompletados, confirmaciones y guardados cuando aparezcan. "
+        "No inventes credenciales, polizas, clientes ni IDs: usa testData con valores TODO. "
+        "No supongas que un control es input, select o button sin evidencia tecnica. Si falta esa evidencia, "
+        "usa locator(selector) con un selector provisional descriptivo y una nota TODO. "
+        "Nunca hagas fill sobre botones ni selectOption sobre elementos sin evidencia de que sean select. "
+        "Usa nombres especificos, nunca firstInput, firstActionButton o submitButton. "
+        "Prioriza codegen y selectores aportados; luego getByRole, getByLabel, getByPlaceholder y getByText. "
+        "Usa CSS o data-testid provisionales solo como ultimo recurso. Distingue botones repetidos por modal, "
+        "seccion o locator padre. No uses page.click('body') ni waitForTimeout. "
+        "Espera visibilidad, habilitacion, URL, respuesta o estado del DOM. Usa helpers para acciones repetidas. "
+        "Maneja iframes con frameLocator y nuevas paginas con context.waitForEvent('page') si la evidencia lo indica. "
+        "Navega directamente a initial_url si es absoluta; si es relativa combinala con BASE_URL. "
+        "Genera fechas de forma determinista en el formato indicado o deja el formato configurable. "
+        "Incluye assertions intermedias y finales solo para resultados conocidos. No inventes mensajes de exito. "
+        "Si falta el resultado esperado, deja una assertion TODO identificada y explicala en ai_notes. "
+        "El codigo debe compilar luego de completar unicamente valores TODO y selectores provisionales."
+    )
+
+
 def _build_prompt(payload: Dict[str, str]) -> List[Dict[str, str]]:
     system = (
-        "Sos un generador senior de pruebas Playwright para QA. "
-        "Genera codigo TypeScript con @playwright/test, mantenible, completo y listo para editar. "
-        "Transforma TODOS los pasos numerados de la descripcion en acciones trazables dentro del spec, "
-        "incluyendo ventanas emergentes, solapas, busquedas, selecciones, confirmaciones y guardado. "
-        "Agrega comentarios // Paso N para conservar la correspondencia con el caso original. "
-        "No inventes credenciales, polizas, clientes ni identificadores reales: colocalos en testData "
-        "con valores TODO claramente editables. Usa nombres especificos para cada selector y dato; "
-        "no uses selectores genericos como firstInput, firstActionButton o submitButton. "
-        "Si faltan selectores tecnicos, propone data-testid descriptivos en el objeto selectors y "
-        "explicalo en ai_notes. Preferi getByRole/getByLabel cuando el texto visible permita identificar "
-        "el elemento. Para iconos sin nombre accesible usa page.locator(selectors.nombre). "
-        "Si initial_url es absoluta (http/https), navega directamente a ella. Si es una ruta relativa, "
-        "combinala con BASE_URL. No uses waitForTimeout. Espera estados visibles/habilitados y agrega "
-        "assertions utiles en puntos importantes y al final. "
-        "Devuelve JSON valido con exactamente estas claves: generated_code (string), "
+        "Sos un arquitecto senior de automatizacion QA especializado en Playwright. "
+        + _generation_rules()
+        + " Devuelve JSON valido con exactamente estas claves: generated_code (string), "
         "selectors (objeto string a string), test_data (objeto string a string) y ai_notes (array de strings)."
     )
     user = "Contexto de generacion Playwright:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
@@ -173,13 +189,33 @@ def _parse_ai_json(raw: str) -> Optional[Dict[str, Any]]:
             return None
 
 
+def _video_duration(video_path: Path) -> Optional[float]:
+    if not shutil.which("ffprobe"):
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", str(video_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        return max(float(result.stdout.strip()), 1.0)
+    except Exception:
+        return None
+
+
 def _extract_video_frames(video_path: Optional[Path]) -> List[Path]:
     if not video_path or not video_path.exists() or not shutil.which("ffmpeg"):
         return []
     stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
     out_dir = FRAME_DIR / stamp
     out_dir.mkdir(parents=True, exist_ok=True)
-    pattern = str(out_dir / "frame_%02d.jpg")
+    pattern = str(out_dir / "frame_%03d.jpg")
+    interval = max((_video_duration(video_path) or 72) / MAX_VIDEO_FRAMES, 2)
     try:
         subprocess.run(
             [
@@ -188,9 +224,9 @@ def _extract_video_frames(video_path: Optional[Path]) -> List[Path]:
                 "-i",
                 str(video_path),
                 "-vf",
-                "fps=1/6,scale=960:-1",
+                f"fps=1/{interval:.2f},scale=1280:-1",
                 "-frames:v",
-                "6",
+                str(MAX_VIDEO_FRAMES),
                 pattern,
             ],
             check=True,
@@ -198,7 +234,7 @@ def _extract_video_frames(video_path: Optional[Path]) -> List[Path]:
             stderr=subprocess.DEVNULL,
             timeout=45,
         )
-        return sorted(out_dir.glob("frame_*.jpg"))[:6]
+        return sorted(out_dir.glob("frame_*.jpg"))[:MAX_VIDEO_FRAMES]
     except Exception:
         return []
 
@@ -213,8 +249,9 @@ def _generate_with_vision(payload: Dict[str, str], frames: List[Path]) -> Option
         return None
     try:
         prompt = (
-            "Analiza estos frames de un video de paso a paso y genera una prueba Playwright. "
-            "Usa las observaciones como fuente principal cuando aclaren lo que no se ve. "
+            "Analiza cronologicamente estos frames de un video de paso a paso e identifica pantallas, campos, "
+            "iconos, ventanas, solapas, selecciones y confirmaciones. Usa descripcion, observaciones, codegen "
+            "y selectores aportados para completar lo que no se ve. " + _generation_rules() + " "
             "Responde JSON estricto con generated_code, selectors, test_data, ai_notes. "
             "Contexto:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
         )
@@ -225,24 +262,122 @@ def _generate_with_vision(payload: Dict[str, str], frames: List[Path]) -> Option
             messages=[
                 {
                     "role": "system",
-                    "content": "Sos un generador senior de pruebas Playwright con vision. No uses waitForTimeout y deja variables de selectors/testData arriba del spec.",
+                    "content": (
+                        "Sos un arquitecto senior de automatizacion Playwright con vision. "
+                        "Devuelve solamente JSON valido y no omitas acciones observadas."
+                    ),
                 },
                 {"role": "user", "content": content},
             ],
             temperature=0.15,
-            max_tokens=6000,
+            max_tokens=12000,
+            response_format={"type": "json_object"},
         )
         data = _parse_ai_json(resp.choices[0].message.content or "")
         if not data or not data.get("generated_code"):
             return None
         return {
-            "generated_code": _clean(data.get("generated_code"), 20000),
+            "generated_code": _clean(data.get("generated_code"), MAX_CODE_LENGTH),
             "selectors": data.get("selectors") or {},
             "test_data": data.get("test_data") or {},
             "ai_notes": data.get("ai_notes") or ["Codigo generado analizando frames del video."],
         }
     except Exception:
         return None
+
+
+def _audit_prompt(payload: Dict[str, str], generated: Dict[str, Any]) -> List[Dict[str, str]]:
+    candidate = {
+        "request": payload,
+        "candidate": {
+            "generated_code": generated.get("generated_code", ""),
+            "selectors": generated.get("selectors", {}),
+            "test_data": generated.get("test_data", {}),
+            "ai_notes": generated.get("ai_notes", []),
+        },
+    }
+    system = (
+        "Sos el revisor principal de automatizacion Playwright. Audita y CORRIGE el candidato antes de "
+        "entregarlo al QA. " + _generation_rules() + " "
+        "Comprueba cobertura de pasos, datos omitidos, acciones incompatibles, botones repetidos, modales, "
+        "popups, iframes, fechas, navegacion, assertions inventadas y selectores provisionales. "
+        "Devuelve el spec corregido, no solamente recomendaciones. Asigna quality_score de 0 a 100. "
+        "manual_actions debe incluir solo aquello imposible de resolver sin datos humanos reales: selectores DOM, "
+        "credenciales, poliza, cliente o resultado esperado desconocido. covered_steps lista los pasos cubiertos. "
+        "Responde JSON con: generated_code, selectors, test_data, ai_notes, quality_score, covered_steps, "
+        "manual_actions y warnings."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(candidate, ensure_ascii=False)},
+    ]
+
+
+def _deterministic_warnings(code: str, payload: Dict[str, str]) -> List[str]:
+    warnings: List[str] = []
+    for needle, message in (
+        ("waitForTimeout(", "El codigo contiene waitForTimeout."),
+        ("page.click('body')", "El codigo hace click sobre body para perder foco."),
+        ('page.click("body")', "El codigo hace click sobre body para perder foco."),
+        ("firstInput", "El codigo contiene el selector generico firstInput."),
+        ("firstActionButton", "El codigo contiene el selector generico firstActionButton."),
+    ):
+        if needle in code:
+            warnings.append(message)
+    if re.search(r"\.fill\(\s*selectors\.\w*(?:button|icon)\b", code, re.I):
+        warnings.append("Se detecto fill sobre un selector cuyo nombre parece corresponder a un boton o icono.")
+    description_steps = {
+        int(value)
+        for value in re.findall(r"(?m)^\s*(\d{1,2})\s*[\)\.-]", payload.get("description", ""))
+    }
+    code_steps = {int(value) for value in re.findall(r"//\s*Paso\s+(\d{1,2})", code, re.I)}
+    missing = sorted(description_steps - code_steps)
+    if missing:
+        warnings.append("Faltan referencias explicitas a los pasos: " + ", ".join(map(str, missing)) + ".")
+    return warnings
+
+
+def _audit_generated(payload: Dict[str, str], generated: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=_audit_prompt(payload, generated),
+            temperature=0,
+            max_tokens=14000,
+            top_p=1,
+            response_format={"type": "json_object"},
+        )
+        audited = _parse_ai_json(response.choices[0].message.content or "")
+        if not audited or not audited.get("generated_code"):
+            raise ValueError("La auditoria no devolvio codigo valido.")
+        code = _clean(audited.get("generated_code"), MAX_CODE_LENGTH)
+        warnings = [str(item) for item in audited.get("warnings", [])]
+        warnings.extend(_deterministic_warnings(code, payload))
+        try:
+            score = int(audited.get("quality_score", 0))
+        except (TypeError, ValueError):
+            score = 0
+        return {
+            "generated_code": code,
+            "selectors": audited.get("selectors") or _extract_json_object(code, "selectors") or generated.get("selectors", {}),
+            "test_data": audited.get("test_data") or _extract_json_object(code, "testData") or generated.get("test_data", {}),
+            "ai_notes": [str(item) for item in audited.get("ai_notes", generated.get("ai_notes", []))],
+            "quality_score": max(0, min(100, score)),
+            "covered_steps": [str(item) for item in audited.get("covered_steps", [])],
+            "manual_actions": [str(item) for item in audited.get("manual_actions", [])],
+            "warnings": list(dict.fromkeys(warnings)),
+        }
+    except Exception as exc:
+        generated["quality_score"] = 0
+        generated["covered_steps"] = []
+        generated["manual_actions"] = [
+            "La auditoria automatica no pudo completarse; revisa el spec antes de ejecutarlo."
+        ]
+        generated["warnings"] = _deterministic_warnings(generated.get("generated_code", ""), payload)
+        generated["ai_notes"] = list(generated.get("ai_notes", [])) + [
+            f"La generacion se completo, pero fallo la segunda auditoria ({type(exc).__name__})."
+        ]
+        return generated
 
 
 def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -252,13 +387,27 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
         payload.get("description", ""),
         payload.get("observations", ""),
     )
-    vision = _generate_with_vision(payload, _extract_video_frames(video_path))
+    frames = _extract_video_frames(video_path)
+    if video_path and not frames:
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudieron extraer capturas del video. Verifica FFmpeg y que el archivo no este dañado.",
+        )
+    vision = _generate_with_vision(payload, frames)
     if vision:
         if not vision["selectors"]:
             vision["selectors"] = _extract_json_object(vision["generated_code"], "selectors") or fallback["selectors"]
         if not vision["test_data"]:
             vision["test_data"] = _extract_json_object(vision["generated_code"], "testData") or fallback["test_data"]
-        return vision
+        return _audit_generated(payload, vision)
+    if video_path:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "La IA no pudo analizar correctamente las capturas del video. "
+                "No se genero codigo usando solamente suposiciones textuales."
+            ),
+        )
     try:
         response = client.chat.completions.create(
             model=MODEL,
@@ -272,15 +421,16 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
         data = _parse_ai_json(raw)
         if not data:
             raise ValueError("La respuesta de IA no contiene JSON valido.")
-        code = _clean(data.get("generated_code"), 50000)
+        code = _clean(data.get("generated_code"), MAX_CODE_LENGTH)
         if not code:
             raise ValueError("La respuesta de IA no contiene codigo Playwright.")
-        return {
+        generated = {
             "generated_code": code,
             "selectors": data.get("selectors") or _extract_json_object(code, "selectors") or fallback["selectors"],
             "test_data": data.get("test_data") or _extract_json_object(code, "testData") or fallback["test_data"],
             "ai_notes": data.get("ai_notes") or ["Codigo generado por IA."],
         }
+        return _audit_generated(payload, generated)
     except Exception as exc:
         raise HTTPException(
             status_code=502,
@@ -327,6 +477,8 @@ async def generate_playwright(
     execution_role: str = Form("qa"),
     description: str = Form(""),
     observations: str = Form(""),
+    codegen: str = Form(""),
+    selector_context: str = Form(""),
     video: Optional[UploadFile] = File(None),
     user: Dict[str, Any] = Depends(current_user),
 ):
@@ -334,6 +486,10 @@ async def generate_playwright(
         raise HTTPException(status_code=403, detail="El generador Playwright esta disponible solo para QA.")
     await _ensure_indexes()
     clean_mode = mode if mode in {"text", "video"} else "text"
+    if clean_mode == "text" and not _clean(description):
+        raise HTTPException(status_code=400, detail="Describe los pasos que debe realizar el caso.")
+    if clean_mode == "video" and (not video or not video.filename):
+        raise HTTPException(status_code=400, detail="Selecciona un video para generar el caso.")
     video_name = await _save_video(video) if clean_mode == "video" else None
     payload = {
         "mode": clean_mode,
@@ -344,8 +500,13 @@ async def generate_playwright(
         "execution_role": _clean(execution_role, 80),
         "description": _clean(description, 12000),
         "observations": _clean(observations, 6000),
+        "codegen": _clean(codegen, 20000),
+        "selector_context": _clean(selector_context, 12000),
         "video_file": video_name or "",
-        "video_note": "El video queda asociado al registro. La generacion usa principalmente observaciones y descripcion textual.",
+        "video_note": (
+            "El video se analiza mediante frames distribuidos en toda su duracion. "
+            "Las observaciones, codegen y selectores aportados complementan los elementos no visibles."
+        ),
     }
     generated = _generate_with_ai(payload, _video_path(video_name))
     now = datetime.utcnow()
@@ -398,6 +559,44 @@ async def update_generated(record_id: str, payload: GeneratedUpdateIn, user: Dic
     await _db()[COLLECTION].update_one({"_id": current["_id"]}, {"$set": update})
     current.update(update)
     await record_activity(user, "Edicion Playwright", "playwright", f"Edito prueba: {current.get('title')}", {"record_id": record_id})
+    return {"record": _as_public(current)}
+
+
+@router.post("/generated/{record_id}/audit")
+async def audit_generated(record_id: str, user: Dict[str, Any] = Depends(current_user)):
+    if user.get("role") != "qa":
+        raise HTTPException(status_code=403, detail="Playwright disponible solo para QA.")
+    if not ObjectId.is_valid(record_id):
+        raise HTTPException(status_code=400, detail="ID invalido.")
+    current = await _db()[COLLECTION].find_one({"_id": ObjectId(record_id)})
+    if not current:
+        raise HTTPException(status_code=404, detail="Prueba no encontrada.")
+    payload = {
+        key: current.get(key, "")
+        for key in (
+            "mode", "title", "requirement_id", "module", "initial_url", "execution_role",
+            "description", "observations", "codegen", "selector_context", "video_note",
+        )
+    }
+    audited = _audit_generated(
+        payload,
+        {
+            "generated_code": current.get("generated_code", ""),
+            "selectors": current.get("selectors", {}),
+            "test_data": current.get("test_data", {}),
+            "ai_notes": current.get("ai_notes", []),
+        },
+    )
+    audited["updated_at"] = datetime.utcnow()
+    await _db()[COLLECTION].update_one({"_id": current["_id"]}, {"$set": audited})
+    current.update(audited)
+    await record_activity(
+        user,
+        "Auditoria Playwright",
+        "playwright",
+        f"Audito prueba: {current.get('title')}",
+        {"record_id": record_id, "quality_score": current.get("quality_score", 0)},
+    )
     return {"record": _as_public(current)}
 
 
