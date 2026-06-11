@@ -350,6 +350,13 @@ def _deterministic_findings(
         if selector_types[key] == "tab":
             critical.append(f"El selector {key} usa la etiqueta HTML inexistente o dudosa 'tab'.")
 
+    referenced_selectors = set(re.findall(r"\bselectors\.(\w+)\b", code))
+    undefined_selectors = sorted(referenced_selectors - set(selectors))
+    if undefined_selectors:
+        critical.append(
+            "El codigo utiliza selectores que no estan definidos: " + ", ".join(undefined_selectors) + "."
+        )
+
     for action, key in re.findall(r"\.(fill|selectOption|click)\(\s*selectors\.(\w+)", code):
         kind = selector_types.get(key, "")
         lowered_key = key.lower()
@@ -372,6 +379,34 @@ def _deterministic_findings(
             for key in ("description", "observations", "codegen", "selector_context")
         )
     )
+    technical_source = payload.get("codegen", "") + "\n" + payload.get("selector_context", "")
+    direct_css_actions = re.findall(
+        r"page\.(?:click|fill|selectOption)\(\s*(['\"])(.*?)\1",
+        code,
+        re.I,
+    )
+    for _, direct_selector in direct_css_actions:
+        if direct_selector in {"body", "html"}:
+            continue
+        if direct_selector not in technical_source:
+            critical.append(
+                f"El selector directo '{direct_selector}' no fue aportado por codegen ni por el contexto tecnico."
+            )
+
+    assumption_markers = (
+        "asumiendo",
+        "se asume",
+        "suponiendo",
+        "selector sugerido",
+        "ajustar selector",
+    )
+    normalized_code = _normalized(code)
+    detected_assumptions = [marker for marker in assumption_markers if marker in normalized_code]
+    if detected_assumptions:
+        critical.append(
+            "El codigo contiene suposiciones tecnicas explicitas: " + ", ".join(detected_assumptions) + "."
+        )
+
     combined_output = _normalized(code + " " + json.dumps(test_data, ensure_ascii=False))
     required_concepts = {
         "poliza": ("poliza", "policy"),
@@ -389,6 +424,19 @@ def _deterministic_findings(
             code,
         ):
             critical.append(f"El dato pendiente testData.{key} fue declarado pero nunca se utiliza en el flujo.")
+
+    referenced_data = set(re.findall(r"\btestData\.(\w+)\b", code))
+    undefined_data = sorted(referenced_data - set(test_data))
+    if undefined_data:
+        critical.append(
+            "El codigo utiliza datos de prueba que no estan definidos: " + ", ".join(undefined_data) + "."
+        )
+
+    dynamic_text_selectors = re.findall(r"[`'\"]text=\$\{testData\.(\w+)\}[`'\"]", code)
+    for key in dynamic_text_selectors:
+        manual.append(
+            f"Confirmar que el texto visible usado para seleccionar testData.{key} sea unico en la ventana correspondiente."
+        )
 
     if "toLocaleDateString()" in code:
         warnings.append("La fecha usa el locale del servidor y puede cambiar de formato entre ambientes.")
