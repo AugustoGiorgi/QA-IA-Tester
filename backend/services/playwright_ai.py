@@ -705,6 +705,8 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
             "ai_notes": data.get("ai_notes") or ["Codigo generado por IA."],
         }
         return _audit_generated(payload, generated)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=502,
