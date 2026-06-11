@@ -332,13 +332,16 @@ def _deterministic_findings(
     test_data = {str(key): str(value) for key, value in (test_data or {}).items()}
     for needle, message in (
         ("waitForTimeout(", "El codigo contiene waitForTimeout."),
-        ("page.click('body')", "El codigo hace click sobre body para perder foco."),
-        ('page.click("body")', "El codigo hace click sobre body para perder foco."),
         ("firstInput", "El codigo contiene el selector generico firstInput."),
         ("firstActionButton", "El codigo contiene el selector generico firstActionButton."),
     ):
         if needle in code:
             warnings.append(message)
+    if "page.click('body')" in code or 'page.click("body")' in code:
+        critical.append(
+            "El codigo hace click sobre body para disparar el autocompletado; debe usar un elemento estable "
+            "o una accion explicita del campo."
+        )
 
     selector_types: Dict[str, str] = {}
     for key, value in selectors.items():
@@ -380,6 +383,13 @@ def _deterministic_findings(
         if any(alias in source for alias in aliases) and not any(alias in combined_output for alias in aliases):
             critical.append(f"El flujo solicita {label}, pero no existe en testData ni en el codigo.")
 
+    for key, value in test_data.items():
+        if str(value).strip().lower().startswith("todo") and not re.search(
+            rf"\btestData\.{re.escape(key)}\b",
+            code,
+        ):
+            critical.append(f"El dato pendiente testData.{key} fue declarado pero nunca se utiliza en el flujo.")
+
     if "toLocaleDateString()" in code:
         warnings.append("La fecha usa el locale del servidor y puede cambiar de formato entre ambientes.")
 
@@ -395,8 +405,9 @@ def _deterministic_findings(
     for key in set(repeated_selectors):
         count = repeated_selectors.count(key)
         if count >= 3 and not re.search(rf"(?:modal|dialog|section).*selectors\.{re.escape(key)}", code, re.I | re.S):
-            warnings.append(
-                f"El selector {key} se reutiliza {count} veces sin quedar claramente acotado a cada ventana."
+            critical.append(
+                f"El selector {key} se reutiliza {count} veces para distintas acciones sin quedar acotado "
+                "a cada modal o seccion."
             )
 
     technical_context = bool(_clean(payload.get("codegen")) or _clean(payload.get("selector_context")))
