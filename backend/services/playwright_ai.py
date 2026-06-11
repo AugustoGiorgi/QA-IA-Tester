@@ -8,7 +8,7 @@ import subprocess
 import unicodedata
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -418,6 +418,27 @@ def _deterministic_findings(
         if any(alias in source for alias in aliases) and not any(alias in combined_output for alias in aliases):
             critical.append(f"El flujo solicita {label}, pero no existe en testData ni en el codigo.")
 
+    functional_values: List[Tuple[str, str]] = []
+    for raw_line in str(payload.get("description", "")).splitlines():
+        line = raw_line.strip().lstrip("-").strip()
+        match = re.match(r'["“]?([^:"]{2,80})["”]?\s*:\s*(.+)$', line)
+        if not match:
+            continue
+        field = match.group(1).strip(" \"“”")
+        value = match.group(2).strip().strip(" \"“”.,")
+        value = re.split(r"\s+\(|\s+[Yy]\s+luego\b|\s+[Hh]acer clic\b", value, maxsplit=1)[0].strip()
+        if not value or value.lower().startswith(("hacer ", "seleccionar ", "cliquear ", "fecha del dia")):
+            continue
+        if len(value) <= 80:
+            functional_values.append((field, value))
+
+    for field, value in functional_values:
+        normalized_value = _normalized(value)
+        if normalized_value and normalized_value not in combined_output:
+            critical.append(
+                f"El valor funcional obligatorio '{field}: {value}' no aparece en testData ni en el codigo."
+            )
+
     for key, value in test_data.items():
         if str(value).strip().lower().startswith("todo") and not re.search(
             rf"\btestData\.{re.escape(key)}\b",
@@ -448,6 +469,41 @@ def _deterministic_findings(
         normalized_literal = _normalized(literal)
         if normalized_literal and normalized_literal not in expected_source:
             critical.append(f"La validacion final parece inventada y no figura en el caso: '{literal}'.")
+
+    asserted_urls = re.findall(r"toHaveURL\(\s*/([^/]{2,120})/", code, re.I)
+    asserted_urls.extend(re.findall(r"toHaveURL\(\s*['\"]([^'\"]{2,200})['\"]", code, re.I))
+    for expected_url in asserted_urls:
+        if _normalized(expected_url) not in expected_source:
+            critical.append(
+                f"La assertion de URL '/{expected_url}/' fue inventada y no figura en el caso."
+            )
+
+    semantic_pairs = re.findall(
+        r"\.(?:fill|selectOption)\(\s*selectors\.(\w+)\s*,\s*testData\.(\w+)",
+        code,
+    )
+    semantic_tokens = {
+        "client": {"client", "cliente"},
+        "figure": {"figure", "figura"},
+        "policy": {"policy", "poliza"},
+        "claimtype": {"claimtype", "tiporeclamo", "tiposiniestro"},
+        "indemnity": {"indemnity", "indemnizacion"},
+    }
+    for selector_key, data_key in semantic_pairs:
+        normalized_selector = _normalized(selector_key).replace("_", "")
+        normalized_data = _normalized(data_key).replace("_", "")
+        selector_groups = {
+            group for group, tokens in semantic_tokens.items()
+            if any(token in normalized_selector for token in tokens)
+        }
+        data_groups = {
+            group for group, tokens in semantic_tokens.items()
+            if any(token in normalized_data for token in tokens)
+        }
+        if selector_groups and data_groups and selector_groups.isdisjoint(data_groups):
+            critical.append(
+                f"Asignacion semantica incompatible: selectors.{selector_key} recibe testData.{data_key}."
+            )
 
     repeated_selectors = re.findall(r"page\.click\(\s*selectors\.(\w+)", code)
     for key in set(repeated_selectors):
