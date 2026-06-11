@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from pymongo import ASCENDING, DESCENDING
 
 from services.activity import record_activity
-from services.ai import MODEL, client, complete
+from services.ai import MODEL, client
 from services.auth import _db, current_user
 from services.files import safe_filename
 
@@ -82,6 +82,7 @@ def _extract_json_object(text: str, key: str) -> Dict[str, str]:
 def _fallback_code(title: str, initial_url: str, description: str, observations: str) -> Dict[str, Any]:
     spec_title = title or "Prueba generada"
     url = initial_url or "/"
+    navigation_target = url if re.match(r"^https?://", url, re.I) else f"${{BASE_URL}}{url}"
     data_hint = "Completa estos datos con valores reales antes de ejecutar."
     code = f"""import {{ test, expect }} from '@playwright/test';
 
@@ -100,7 +101,7 @@ const testData = {{
 
 test.describe('{spec_title}', () => {{
   test('debe ejecutar el flujo esperado', async ({{ page }}) => {{
-    await page.goto(`${{BASE_URL}}{url}`);
+    await page.goto('{navigation_target}');
 
     // TODO: Ajustar estos pasos segun el flujo real detectado.
     await page.locator(selectors.firstActionButton).click();
@@ -135,12 +136,21 @@ test.describe('{spec_title}', () => {{
 def _build_prompt(payload: Dict[str, str]) -> List[Dict[str, str]]:
     system = (
         "Sos un generador senior de pruebas Playwright para QA. "
-        "Genera codigo TypeScript con @playwright/test, mantenible y listo para editar. "
-        "No inventes credenciales reales. Usa variables arriba del archivo para selectors y testData. "
-        "Si faltan datos tecnicos, deja selectores data-testid sugeridos y notas claras. "
-        "Preferi getByRole/getByLabel si el usuario provee labels; si no, usa page.locator(selectors.nombre). "
-        "No uses waitForTimeout. Inclui assertions. Responde en JSON estricto con claves: "
-        "generated_code, selectors, test_data, ai_notes."
+        "Genera codigo TypeScript con @playwright/test, mantenible, completo y listo para editar. "
+        "Transforma TODOS los pasos numerados de la descripcion en acciones trazables dentro del spec, "
+        "incluyendo ventanas emergentes, solapas, busquedas, selecciones, confirmaciones y guardado. "
+        "Agrega comentarios // Paso N para conservar la correspondencia con el caso original. "
+        "No inventes credenciales, polizas, clientes ni identificadores reales: colocalos en testData "
+        "con valores TODO claramente editables. Usa nombres especificos para cada selector y dato; "
+        "no uses selectores genericos como firstInput, firstActionButton o submitButton. "
+        "Si faltan selectores tecnicos, propone data-testid descriptivos en el objeto selectors y "
+        "explicalo en ai_notes. Preferi getByRole/getByLabel cuando el texto visible permita identificar "
+        "el elemento. Para iconos sin nombre accesible usa page.locator(selectors.nombre). "
+        "Si initial_url es absoluta (http/https), navega directamente a ella. Si es una ruta relativa, "
+        "combinala con BASE_URL. No uses waitForTimeout. Espera estados visibles/habilitados y agrega "
+        "assertions utiles en puntos importantes y al final. "
+        "Devuelve JSON valido con exactamente estas claves: generated_code (string), "
+        "selectors (objeto string a string), test_data (objeto string a string) y ai_notes (array de strings)."
     )
     user = "Contexto de generacion Playwright:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -153,7 +163,14 @@ def _parse_ai_json(raw: str) -> Optional[Dict[str, Any]]:
     try:
         return json.loads(clean)
     except Exception:
-        return None
+        start = clean.find("{")
+        end = clean.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            return json.loads(clean[start:end + 1])
+        except Exception:
+            return None
 
 
 def _extract_video_frames(video_path: Optional[Path]) -> List[Path]:
@@ -243,13 +260,21 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
             vision["test_data"] = _extract_json_object(vision["generated_code"], "testData") or fallback["test_data"]
         return vision
     try:
-        raw = complete(_build_prompt(payload), temperature=0.15)
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=_build_prompt(payload),
+            temperature=0.1,
+            max_tokens=10000,
+            top_p=1,
+            response_format={"type": "json_object"},
+        )
+        raw = response.choices[0].message.content or ""
         data = _parse_ai_json(raw)
         if not data:
-            return fallback
-        code = _clean(data.get("generated_code"), 20000)
+            raise ValueError("La respuesta de IA no contiene JSON valido.")
+        code = _clean(data.get("generated_code"), 50000)
         if not code:
-            return fallback
+            raise ValueError("La respuesta de IA no contiene codigo Playwright.")
         return {
             "generated_code": code,
             "selectors": data.get("selectors") or _extract_json_object(code, "selectors") or fallback["selectors"],
@@ -257,8 +282,13 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
             "ai_notes": data.get("ai_notes") or ["Codigo generado por IA."],
         }
     except Exception as exc:
-        fallback["ai_notes"].append(f"No se pudo usar IA configurada; se uso plantilla base. Detalle: {type(exc).__name__}.")
-        return fallback
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "La IA no pudo generar un spec valido. No se guardo una plantilla generica. "
+                f"Intenta nuevamente o revisa la configuracion de OpenAI ({type(exc).__name__})."
+            ),
+        ) from exc
 
 
 async def _save_video(video: Optional[UploadFile]) -> Optional[str]:
@@ -312,8 +342,8 @@ async def generate_playwright(
         "module": _clean(module, 120),
         "initial_url": _clean(initial_url, 500),
         "execution_role": _clean(execution_role, 80),
-        "description": _clean(description),
-        "observations": _clean(observations),
+        "description": _clean(description, 12000),
+        "observations": _clean(observations, 6000),
         "video_file": video_name or "",
         "video_note": "El video queda asociado al registro. La generacion usa principalmente observaciones y descripcion textual.",
     }
