@@ -296,17 +296,53 @@
       color: #dbeafe;
     }
 
-    .pw-vars pre {
-      margin: 0;
+    .pw-variable-editor {
+      display: grid;
+      gap: 9px;
       min-height: 150px;
-      max-height: 240px;
+      max-height: 320px;
       overflow: auto;
       border: 1px solid #22324f;
       border-radius: 8px;
       background: #08111f;
-      color: #bfdbfe;
       padding: 12px;
-      font: 12.5px/1.55 Consolas, Monaco, monospace;
+    }
+
+    .pw-variable-row {
+      display: grid;
+      grid-template-columns: minmax(130px, 0.42fr) minmax(180px, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pw-variable-row label {
+      overflow: hidden;
+      color: #93c5fd;
+      font: 12px/1.35 Consolas, Monaco, monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pw-variable-row input {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid #2a3c5c;
+      border-radius: 6px;
+      background: #0b1528;
+      color: #e2e8f0;
+      padding: 8px 10px;
+      font: 12px/1.35 Consolas, Monaco, monospace;
+    }
+
+    .pw-variable-row input.todo {
+      border-color: #d97706;
+      background: rgba(217, 119, 6, 0.08);
+    }
+
+    .pw-vars-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 20px 18px;
     }
 
     .pw-notes {
@@ -411,6 +447,9 @@
       .pw-quality {
         grid-template-columns: 1fr;
       }
+      .pw-variable-row {
+        grid-template-columns: 1fr;
+      }
       .pw-form { position: static; }
       .pw-code { min-height: 420px; }
       .pw-item { grid-template-columns: 1fr; }
@@ -487,13 +526,16 @@
           </div>
           <div class="pw-vars">
             <div>
-              <h2>Selectors</h2>
-              <pre id="pwSelectors">{}</pre>
+              <h2>Selectores editables</h2>
+              <div id="pwSelectors" class="pw-variable-editor"></div>
             </div>
             <div>
-              <h2>Datos</h2>
-              <pre id="pwData">{}</pre>
+              <h2>Datos editables</h2>
+              <div id="pwData" class="pw-variable-editor"></div>
             </div>
+          </div>
+          <div class="pw-vars-actions">
+            <button id="pwApplyVariables" class="pw-btn secondary" type="button" disabled>Aplicar variables al codigo</button>
           </div>
           <div class="pw-quality">
             <div class="pw-score">
@@ -551,6 +593,6 @@
     </section>
   </main>
 
-  <script type="module" src="/app/js/playwright_xlsx.js?v=20260611-2"></script>
+  <script type="module" src="/app/js/playwright_xlsx.js?v=20260611-3"></script>
 </body>
 </html>

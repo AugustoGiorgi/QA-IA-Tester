@@ -39,6 +39,88 @@ function renderReviewList(id, items, emptyText, ok = false) {
     : `<li>${escapeHtml(emptyText)}</li>`;
 }
 
+function renderVariableEditor(id, values, kind) {
+  const container = $(id);
+  const entries = Object.entries(values || {});
+  container.innerHTML = entries.length
+    ? entries.map(([key, value]) => {
+      const text = String(value ?? '');
+      const todo = /todo/i.test(text);
+      return `
+        <div class="pw-variable-row">
+          <label title="${escapeHtml(key)}">${escapeHtml(key)}</label>
+          <input
+            class="${todo ? 'todo' : ''}"
+            data-variable-kind="${kind}"
+            data-variable-key="${escapeHtml(key)}"
+            value="${escapeHtml(text)}"
+            autocomplete="off"
+          />
+        </div>
+      `;
+    }).join('')
+    : '<span class="pw-muted">Sin variables detectadas.</span>';
+  container.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', () => input.classList.toggle('todo', /todo/i.test(input.value)));
+  });
+}
+
+function collectVariables(kind) {
+  return Object.fromEntries(
+    [...document.querySelectorAll(`[data-variable-kind="${kind}"]`)]
+      .map(input => [input.dataset.variableKey, input.value]),
+  );
+}
+
+function replaceObjectDeclaration(code, variableName, values) {
+  const declaration = new RegExp(`\\bconst\\s+${variableName}\\s*=\\s*\\{`);
+  const match = declaration.exec(code);
+  if (!match) return code;
+  const start = match.index;
+  const open = code.indexOf('{', match.index);
+  let depth = 0;
+  let quote = '';
+  let escaped = false;
+  let close = -1;
+  for (let index = open; index < code.length; index += 1) {
+    const char = code[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        close = index;
+        break;
+      }
+    }
+  }
+  if (close < 0) return code;
+  const end = code[close + 1] === ';' ? close + 2 : close + 1;
+  const replacement = `const ${variableName} = ${JSON.stringify(values, null, 2)};`;
+  return `${code.slice(0, start)}${replacement}${code.slice(end)}`;
+}
+
+function applyVariablesToCode(showStatus = true) {
+  if (!currentRecord) return;
+  const selectors = collectVariables('selector');
+  const testData = collectVariables('data');
+  let code = $('pwCode').value;
+  code = replaceObjectDeclaration(code, 'selectors', selectors);
+  code = replaceObjectDeclaration(code, 'testData', testData);
+  $('pwCode').value = code;
+  currentRecord = { ...currentRecord, selectors, test_data: testData, generated_code: code };
+  if (showStatus) setStatus('Variables aplicadas al codigo. Guarda los cambios cuando termines.', true);
+}
+
 function switchTab(tab) {
   document.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   document.querySelectorAll('.pw-tab').forEach(section => section.classList.add('pw-hidden'));
@@ -49,8 +131,8 @@ function switchTab(tab) {
 function setRecord(record) {
   currentRecord = record;
   $('pwCode').value = record?.generated_code || '';
-  $('pwSelectors').textContent = JSON.stringify(record?.selectors || {}, null, 2);
-  $('pwData').textContent = JSON.stringify(record?.test_data || {}, null, 2);
+  renderVariableEditor('pwSelectors', record?.selectors, 'selector');
+  renderVariableEditor('pwData', record?.test_data, 'data');
   $('pwNotes').innerHTML = (record?.ai_notes || []).map(note => `<p>${escapeHtml(note)}</p>`).join('') || '<span class="pw-muted">Sin notas.</span>';
   $('pwQualityScore').textContent = record ? `${Number(record.quality_score || 0)}%` : '-';
   const reviewStatus = record?.review_status || (record ? 'needs_review' : '');
@@ -72,6 +154,7 @@ function setRecord(record) {
   );
   $('pwSave').disabled = !record;
   $('pwAudit').disabled = !record;
+  $('pwApplyVariables').disabled = !record;
   $('pwCopy').disabled = !record;
   $('pwDownload').disabled = !record;
 }
@@ -118,10 +201,16 @@ async function saveCurrent() {
   if (!currentRecord) return;
   setStatus('Guardando cambios...');
   try {
+    const selectors = collectVariables('selector');
+    const testData = collectVariables('data');
     const res = await authFetch(`/api/playwright/ai/generated/${currentRecord.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ generated_code: $('pwCode').value }),
+      body: JSON.stringify({
+        generated_code: $('pwCode').value,
+        selectors,
+        test_data: testData,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'No se pudo guardar.');
@@ -138,10 +227,16 @@ async function auditCurrent() {
   setStatus('Guardando y auditando nuevamente el codigo...');
   $('pwAudit').disabled = true;
   try {
+    const selectors = collectVariables('selector');
+    const testData = collectVariables('data');
     const saveRes = await authFetch(`/api/playwright/ai/generated/${currentRecord.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ generated_code: $('pwCode').value }),
+      body: JSON.stringify({
+        generated_code: $('pwCode').value,
+        selectors,
+        test_data: testData,
+      }),
     });
     const saveData = await saveRes.json().catch(() => ({}));
     if (!saveRes.ok) throw new Error(saveData.detail || 'No se pudo guardar antes de auditar.');
@@ -282,6 +377,7 @@ $('pwMode')?.addEventListener('change', () => {
 $('aiForm')?.addEventListener('submit', generateAi);
 $('pwSave')?.addEventListener('click', saveCurrent);
 $('pwAudit')?.addEventListener('click', auditCurrent);
+$('pwApplyVariables')?.addEventListener('click', () => applyVariablesToCode());
 $('pwCopy')?.addEventListener('click', async () => {
   await navigator.clipboard.writeText($('pwCode').value);
   setStatus('Codigo copiado.', true);
