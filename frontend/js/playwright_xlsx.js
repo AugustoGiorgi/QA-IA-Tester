@@ -16,6 +16,14 @@ function escapeHtml(value = '') {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function apiError(data, fallback) {
+  if (typeof data?.detail === 'string') return data.detail;
+  if (Array.isArray(data?.detail)) {
+    return data.detail.map(item => item?.msg || JSON.stringify(item)).join(' ');
+  }
+  return fallback;
+}
+
 function fmtDate(value) {
   if (!value) return '';
   const d = new Date(value);
@@ -45,6 +53,9 @@ function setRecord(record) {
   $('pwData').textContent = JSON.stringify(record?.test_data || {}, null, 2);
   $('pwNotes').innerHTML = (record?.ai_notes || []).map(note => `<p>${escapeHtml(note)}</p>`).join('') || '<span class="pw-muted">Sin notas.</span>';
   $('pwQualityScore').textContent = record ? `${Number(record.quality_score || 0)}%` : '-';
+  const reviewStatus = record?.review_status || (record ? 'needs_review' : '');
+  $('pwReviewStatus').textContent = reviewStatus === 'ready' ? 'Listo' : reviewStatus ? 'Borrador para revisar' : '';
+  $('pwReviewStatus').classList.toggle('ready', reviewStatus === 'ready');
   const covered = Array.isArray(record?.covered_steps) ? record.covered_steps : [];
   $('pwCoverage').textContent = covered.length
     ? `Pasos cubiertos por la revision: ${covered.join(', ')}`
@@ -86,12 +97,12 @@ async function generateAi(event) {
 
     const res = await authFetch('/api/playwright/ai/generate', { method: 'POST', body: fd });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'No se pudo generar el codigo.');
+    if (!res.ok) throw new Error(apiError(data, 'No se pudo generar el codigo.'));
     setRecord(data.record);
     const pending = Array.isArray(data.record?.manual_actions) ? data.record.manual_actions.length : 0;
     setStatus(
-      pending
-        ? `Codigo generado, auditado y guardado. Quedan ${pending} datos tecnicos para completar.`
+      data.record?.review_status === 'needs_review'
+        ? `Borrador generado y guardado. Hay ${pending} puntos para revisar antes de ejecutarlo.`
         : 'Codigo generado, auditado y guardado en la biblioteca.',
       true,
     );
@@ -136,9 +147,14 @@ async function auditCurrent() {
     if (!saveRes.ok) throw new Error(saveData.detail || 'No se pudo guardar antes de auditar.');
     const res = await authFetch(`/api/playwright/ai/generated/${currentRecord.id}/audit`, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'No se pudo auditar el codigo.');
+    if (!res.ok) throw new Error(apiError(data, 'No se pudo auditar el codigo.'));
     setRecord(data.record);
-    setStatus('Codigo corregido y recalificado por la auditoria automatica.', true);
+    setStatus(
+      data.record?.review_status === 'needs_review'
+        ? 'Auditoria completada. El codigo sigue como borrador y conserva los pendientes detectados.'
+        : 'Codigo corregido y recalificado por la auditoria automatica.',
+      true,
+    );
     await loadLibrary(false);
   } catch (err) {
     setStatus(err.message || 'Error al auditar.');

@@ -577,6 +577,58 @@ def _repair_generated(
     return repaired
 
 
+def _reviewed_result(
+    payload: Dict[str, str],
+    generated: Dict[str, Any],
+    audit_data: Optional[Dict[str, Any]] = None,
+    extra_note: str = "",
+) -> Dict[str, Any]:
+    audit_data = audit_data or {}
+    code = _clean(
+        audit_data.get("generated_code") or generated.get("generated_code"),
+        MAX_CODE_LENGTH,
+    )
+    selectors = (
+        audit_data.get("selectors")
+        or _extract_json_object(code, "selectors")
+        or generated.get("selectors", {})
+    )
+    test_data = (
+        audit_data.get("test_data")
+        or _extract_json_object(code, "testData")
+        or generated.get("test_data", {})
+    )
+    findings = _deterministic_findings(code, payload, selectors, test_data)
+    notes = [str(item) for item in audit_data.get("ai_notes", generated.get("ai_notes", []))]
+    if extra_note:
+        notes.append(extra_note)
+    warnings = [str(item) for item in audit_data.get("warnings", [])]
+    warnings.extend(findings["warnings"])
+    warnings.extend(f"REQUIERE REVISION: {item}" for item in findings["critical"])
+    manual_actions = [str(item) for item in audit_data.get("manual_actions", [])]
+    manual_actions.extend(findings["manual"])
+    manual_actions.extend(findings["critical"])
+    try:
+        score = int(audit_data.get("quality_score", 85))
+    except (TypeError, ValueError):
+        score = 85
+    if findings["critical"]:
+        score = min(score, 45)
+    elif findings["manual"]:
+        score = min(score, 75)
+    return {
+        "generated_code": code,
+        "selectors": selectors,
+        "test_data": test_data,
+        "ai_notes": list(dict.fromkeys(notes)),
+        "quality_score": max(0, min(100, score)),
+        "covered_steps": [str(item) for item in audit_data.get("covered_steps", [])],
+        "manual_actions": list(dict.fromkeys(manual_actions)),
+        "warnings": list(dict.fromkeys(warnings)),
+        "review_status": "needs_review" if findings["critical"] or findings["manual"] else "ready",
+    }
+
+
 def _audit_generated(payload: Dict[str, str], generated: Dict[str, Any]) -> Dict[str, Any]:
     try:
         response = client.chat.completions.create(
@@ -595,63 +647,43 @@ def _audit_generated(payload: Dict[str, str], generated: Dict[str, Any]) -> Dict
         test_data = audited.get("test_data") or _extract_json_object(code, "testData") or generated.get("test_data", {})
         findings = _deterministic_findings(code, payload, selectors, test_data)
         if findings["critical"]:
-            repaired = _repair_generated(
-                payload,
-                {
-                    "generated_code": code,
-                    "selectors": selectors,
-                    "test_data": test_data,
-                    "ai_notes": audited.get("ai_notes", []),
-                },
-                findings,
-            )
-            code = _clean(repaired.get("generated_code"), MAX_CODE_LENGTH)
-            selectors = repaired.get("selectors") or _extract_json_object(code, "selectors") or selectors
-            test_data = repaired.get("test_data") or _extract_json_object(code, "testData") or test_data
-            audited = {**audited, **repaired}
-            findings = _deterministic_findings(code, payload, selectors, test_data)
-            if findings["critical"]:
-                raise HTTPException(
-                    status_code=502,
-                    detail=(
-                        "La IA genero codigo con errores tecnicos que no pudieron repararse automaticamente: "
-                        + " | ".join(findings["critical"][:4])
+            try:
+                repaired = _repair_generated(
+                    payload,
+                    {
+                        "generated_code": code,
+                        "selectors": selectors,
+                        "test_data": test_data,
+                        "ai_notes": audited.get("ai_notes", []),
+                    },
+                    findings,
+                )
+                return _reviewed_result(
+                    payload,
+                    generated,
+                    {**audited, **repaired},
+                    "El codigo paso por una reparacion automatica adicional.",
+                )
+            except Exception as exc:
+                return _reviewed_result(
+                    payload,
+                    generated,
+                    audited,
+                    (
+                        "La reparacion automatica no pudo completarse. "
+                        f"Se conserva el codigo auditado como borrador ({type(exc).__name__})."
                     ),
                 )
-
-        warnings = [str(item) for item in audited.get("warnings", [])]
-        warnings.extend(findings["warnings"])
-        warnings.extend(f"ERROR PENDIENTE: {item}" for item in findings["critical"])
-        manual_actions = [str(item) for item in audited.get("manual_actions", [])]
-        manual_actions.extend(findings["manual"])
-        try:
-            score = int(audited.get("quality_score", 0))
-        except (TypeError, ValueError):
-            score = 85
-        if findings["critical"]:
-            score = min(score, 35)
-        elif findings["manual"]:
-            score = min(score, 75)
-        return {
-            "generated_code": code,
-            "selectors": selectors,
-            "test_data": test_data,
-            "ai_notes": [str(item) for item in audited.get("ai_notes", generated.get("ai_notes", []))],
-            "quality_score": max(0, min(100, score)),
-            "covered_steps": [str(item) for item in audited.get("covered_steps", [])],
-            "manual_actions": list(dict.fromkeys(manual_actions)),
-            "warnings": list(dict.fromkeys(warnings)),
-        }
-    except HTTPException:
-        raise
+        return _reviewed_result(payload, generated, audited)
     except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                "El codigo fue generado, pero no pudo superar la auditoria automatica. "
-                f"No se guardo un resultado sin revisar ({type(exc).__name__})."
+        return _reviewed_result(
+            payload,
+            generated,
+            extra_note=(
+                "La auditoria automatica no pudo completarse. "
+                f"Se conserva el codigo original como borrador ({type(exc).__name__})."
             ),
-        ) from exc
+        )
 
 
 def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None) -> Dict[str, Any]:

@@ -351,6 +351,18 @@
       font-size: 2rem;
     }
 
+    .pw-review-status {
+      margin-top: 6px;
+      color: #fbbf24;
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .pw-review-status.ready {
+      color: #4ade80;
+    }
+
     .pw-review-list {
       display: grid;
       gap: 8px;
@@ -487,6 +499,7 @@
             <div class="pw-score">
               <strong id="pwQualityScore">-</strong>
               <span class="pw-muted">Calidad IA</span>
+              <span id="pwReviewStatus" class="pw-review-status"></span>
             </div>
             <div>
               <h2>Revision automatica</h2>
@@ -538,6 +551,6 @@
     </section>
   </main>
 
-  <script type="module" src="/app/js/playwright_xlsx.js?v=20260611-1"></script>
+  <script type="module" src="/app/js/playwright_xlsx.js?v=20260611-2"></script>
 </body>
 </html>
