@@ -146,11 +146,15 @@ def _generation_rules() -> str:
         "Transforma TODOS los pasos funcionales identificables en acciones trazables con comentarios // Paso N. "
         "Conserva el orden e incluye login, navegacion, modales, dialogs, iframes, pestanas, agendas, tablas, "
         "autocompletados, confirmaciones y guardados cuando aparezcan. "
+        "Si el video u observaciones mencionan varios procesos, genera varios test(...) dentro del mismo archivo, "
+        "pero con un solo import, un solo objeto selectors y un solo objeto testData compartidos. "
         "No inventes credenciales, polizas, clientes ni IDs: crea una entrada especifica en testData con valor "
         "TODO por cada dato desconocido y UTILIZALA en el paso correspondiente. No declares variables sin uso. "
         "Nunca inventes codigos de transaccion, codigos de siniestro, numeros de poliza, fechas, agencias, "
         "productos, clientes ni valores de combos. Si no fueron escritos por el usuario o no aparecen con claridad "
         "en codegen/selectores/contexto tecnico, usa TODO_NOMBRE_DATO. "
+        "Tampoco agregues campos funcionales que no esten en el video, observaciones o codegen. Si no estas seguro "
+        "de que un campo exista, no lo agregues al flujo; dejalo como pendiente en ai_notes. "
         "Incluye tambien como variables los datos conocidos que el QA podria querer cambiar. "
         "No supongas que un control es input, select o button sin evidencia tecnica. Si falta esa evidencia, "
         "crea una entrada especifica en selectors con un selector provisional descriptivo que contenga TODO "
@@ -174,6 +178,8 @@ def _generation_rules() -> str:
         "Marca en ai_notes una checklist concreta de selectores, datos y assertions que el QA debe completar. "
         "El objeto selectors debe ser plano: usa keys como loginUsuarioInput, sin objetos anidados y sin strings "
         "que contengan JSON o diccionarios. El objeto test_data tambien debe ser plano. "
+        "No declares testDataSalud, selectorsSalud ni variantes por proceso; usa keys especificas dentro de los "
+        "objetos compartidos. "
         "El codigo debe compilar luego de completar unicamente valores TODO y selectores provisionales. "
         "Devuelve selectors y test_data completos porque la interfaz los presentara como campos editables."
     )
@@ -535,6 +541,131 @@ def _flatten_selector_groups(
     return code, flat, notes
 
 
+def _fix_mojibake(text: str) -> str:
+    replacements = {
+        "Ã¡": "á",
+        "Ã©": "é",
+        "Ã­": "í",
+        "Ã³": "ó",
+        "Ãº": "ú",
+        "Ã±": "ñ",
+        "Ã": "Á",
+        "Ã‰": "É",
+        "Ã": "Í",
+        "Ã“": "Ó",
+        "Ãš": "Ú",
+        "Ã‘": "Ñ",
+        "Â¿": "¿",
+        "Â¡": "¡",
+    }
+    clean = str(text or "")
+    for bad, good in replacements.items():
+        clean = clean.replace(bad, good)
+    return clean
+
+
+def _dedupe_playwright_imports(code: str) -> Tuple[str, List[str]]:
+    notes: List[str] = []
+    seen = False
+    lines: List[str] = []
+    removed = 0
+    import_pattern = re.compile(r"^\s*import\s+\{\s*test\s*,\s*expect\s*\}\s+from\s+['\"]@playwright/test['\"]\s*;?\s*$")
+    for line in str(code or "").splitlines():
+        if import_pattern.match(line):
+            if seen:
+                removed += 1
+                continue
+            seen = True
+        lines.append(line)
+    if removed:
+        notes.append(f"Se eliminaron {removed} imports duplicados de Playwright para que el spec compile.")
+    return "\n".join(lines).strip() + ("\n" if code.endswith("\n") else ""), notes
+
+
+def _remove_const_declaration(code: str, object_name: str) -> str:
+    declaration = re.compile(rf"\bconst\s+{re.escape(object_name)}\s*=\s*\{{")
+    match = declaration.search(code)
+    if not match:
+        return code
+    open_index = code.find("{", match.start())
+    depth = 0
+    quote = ""
+    escaped = False
+    close = -1
+    for index in range(open_index, len(code)):
+        char = code[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                close = index
+                break
+    if close < 0:
+        return code
+    end = close + 2 if code[close + 1:close + 2] == ";" else close + 1
+    while end < len(code) and code[end:end + 1] in {"\r", "\n"}:
+        end += 1
+    return code[:match.start()].rstrip() + "\n\n" + code[end:].lstrip()
+
+
+def _collapse_variant_objects(code: str) -> Tuple[str, List[str]]:
+    notes: List[str] = []
+    variants = sorted(
+        set(re.findall(r"\b(testData|selectors)([A-Z][A-Za-z0-9_]*)\b", code)),
+        key=lambda item: len(item[0] + item[1]),
+        reverse=True,
+    )
+    for base, suffix in variants:
+        variant = f"{base}{suffix}"
+        code = re.sub(rf"\b{re.escape(variant)}\.", f"{base}.", code)
+        code = _remove_const_declaration(code, variant)
+        notes.append(f"Se unifico {variant} dentro de {base} para evitar objetos duplicados por proceso.")
+    return code, list(dict.fromkeys(notes))
+
+
+def _postprocess_generated_code(code: str) -> Tuple[str, List[str]]:
+    notes: List[str] = []
+    fixed = _fix_mojibake(code)
+    if fixed != code:
+        notes.append("Se corrigieron caracteres rotos de encoding en el codigo generado.")
+    code, import_notes = _dedupe_playwright_imports(fixed)
+    code, variant_notes = _collapse_variant_objects(code)
+    notes.extend(import_notes)
+    notes.extend(variant_notes)
+    return code, notes
+
+
+def _ensure_referenced_variables(
+    code: str,
+    selectors: Dict[str, str],
+    test_data: Dict[str, str],
+) -> Tuple[Dict[str, str], Dict[str, str], List[str]]:
+    notes: List[str] = []
+    updated_selectors = dict(selectors or {})
+    updated_data = dict(test_data or {})
+    for key in sorted(set(re.findall(r"\bselectors\.(\w+)\b", code))):
+        if key not in updated_selectors:
+            updated_selectors[key] = _normalize_todo_selector(f"TODO_SELECTOR_{key}")
+            notes.append(f"Se agrego selectors.{key} como TODO porque el codigo lo referenciaba.")
+    for key in sorted(set(re.findall(r"\btestData\.(\w+)\b", code))):
+        if key not in updated_data:
+            updated_data[key] = _todo_value_for_key(key)
+            notes.append(f"Se agrego testData.{key} como TODO porque el codigo lo referenciaba.")
+    return updated_selectors, updated_data, notes
+
+
 def _replace_const_object(code: str, object_name: str, values: Dict[str, str]) -> str:
     declaration = re.compile(rf"\bconst\s+{re.escape(object_name)}\s*=\s*\{{")
     match = declaration.search(code)
@@ -770,7 +901,26 @@ def _deterministic_findings(
             )
 
     for key, value in test_data.items():
+        normalized_key = _normalized(key)
         normalized_value = _normalized(value)
+        known_or_expected_key = any(
+            token in normalized_key
+            for token in (
+                "usuario", "username", "contrasena", "password", "poliza", "policy",
+                "cliente", "client", "asegurado", "fecha", "date", "transaccion",
+                "transaction", "causa", "tipo", "reclamo", "siniestro", "indemnizacion",
+                "coverage", "cobertura", "beneficiario", "porcentaje",
+            )
+        )
+        if (
+            not _has_technical_context(payload)
+            and str(value).strip().upper().startswith("TODO")
+            and normalized_key not in source
+            and not known_or_expected_key
+        ):
+            manual.append(
+                f"Confirmar si testData.{key} corresponde al flujo real; no aparece en texto, observaciones ni contexto tecnico."
+            )
         if _looks_like_business_value(key, value) and normalized_value not in source:
             critical.append(
                 f"El dato testData.{key}='{value}' parece inventado o no confirmado por la entrada. "
@@ -927,6 +1077,7 @@ def _reviewed_result(
         audit_data.get("generated_code") or generated.get("generated_code"),
         MAX_CODE_LENGTH,
     )
+    code, postprocess_notes = _postprocess_generated_code(code)
     selectors = (
         audit_data.get("selectors")
         or _extract_json_object(code, "selectors")
@@ -944,13 +1095,16 @@ def _reviewed_result(
     code, test_data, literal_notes = _move_business_literals_to_test_data(code, payload, test_data)
     code, test_data, sanitize_notes = _sanitize_unconfirmed_business_data(code, payload, test_data)
     test_data = _normalize_todo_test_data(test_data)
+    selectors, test_data, referenced_notes = _ensure_referenced_variables(code, selectors, test_data)
     code = _replace_selectors_object(code, selectors)
     code = _replace_test_data_object(code, test_data)
     findings = _deterministic_findings(code, payload, selectors, test_data)
     notes = [str(item) for item in audit_data.get("ai_notes", generated.get("ai_notes", []))]
+    notes.extend(postprocess_notes)
     notes.extend(selector_group_notes)
     notes.extend(literal_notes)
     notes.extend(sanitize_notes)
+    notes.extend(referenced_notes)
     if extra_note:
         notes.append(extra_note)
     warnings = [str(item) for item in audit_data.get("warnings", [])]
