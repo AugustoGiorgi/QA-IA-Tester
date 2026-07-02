@@ -994,13 +994,15 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
     )
     frames, video_error = _extract_video_frames(video_path)
     if video_path and not frames:
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                "No se pudieron extraer capturas del video. Verifica que el archivo no este danado."
+        fallback["ai_notes"].insert(
+            0,
+            (
+                "No se pudieron extraer capturas del video. Se entrega un borrador minimo para completar "
+                "con observaciones o codegen."
                 + _video_extraction_detail(video_error)
             ),
         )
+        return _reviewed_result(payload, fallback)
     vision = _generate_with_vision(payload, frames)
     if vision:
         if not vision["selectors"]:
@@ -1009,13 +1011,14 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
             vision["test_data"] = _extract_json_object(vision["generated_code"], "testData") or fallback["test_data"]
         return _audit_generated(payload, vision)
     if video_path:
-        raise HTTPException(
-            status_code=502,
-            detail=(
+        fallback["ai_notes"].insert(
+            0,
+            (
                 "La IA no pudo analizar correctamente las capturas del video. "
-                "No se genero codigo usando solamente suposiciones textuales."
+                "Se entrega un borrador minimo; agrega observaciones del flujo para mejorar el resultado."
             ),
         )
+        return _reviewed_result(payload, fallback)
     try:
         response = client.chat.completions.create(
             model=MODEL,
