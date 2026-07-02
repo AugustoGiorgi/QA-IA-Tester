@@ -543,26 +543,32 @@ def _flatten_selector_groups(
 
 def _fix_mojibake(text: str) -> str:
     replacements = {
-        "Ã¡": "á",
-        "Ã©": "é",
-        "Ã­": "í",
-        "Ã³": "ó",
-        "Ãº": "ú",
-        "Ã±": "ñ",
-        "Ã": "Á",
-        "Ã‰": "É",
-        "Ã": "Í",
-        "Ã“": "Ó",
-        "Ãš": "Ú",
-        "Ã‘": "Ñ",
-        "Â¿": "¿",
-        "Â¡": "¡",
+        "\u00c3\u00a1": "\u00e1",
+        "\u00c3\u00a9": "\u00e9",
+        "\u00c3\u00ad": "\u00ed",
+        "\u00c3\u00b3": "\u00f3",
+        "\u00c3\u00ba": "\u00fa",
+        "\u00c3\u00b1": "\u00f1",
+        "\u00c3\u0081": "\u00c1",
+        "\u00c3\u0089": "\u00c9",
+        "\u00c3\u008d": "\u00cd",
+        "\u00c3\u0093": "\u00d3",
+        "\u00c3\u009a": "\u00da",
+        "\u00c3\u0091": "\u00d1",
+        "\u00c2\u00bf": "\u00bf",
+        "\u00c2\u00a1": "\u00a1",
     }
     clean = str(text or "")
+    if "\u00c3" in clean or "\u00c2" in clean:
+        try:
+            decoded = clean.encode("latin1").decode("utf-8")
+            if decoded.count("\u00c3") + decoded.count("\u00c2") < clean.count("\u00c3") + clean.count("\u00c2"):
+                clean = decoded
+        except UnicodeError:
+            pass
     for bad, good in replacements.items():
         clean = clean.replace(bad, good)
     return clean
-
 
 def _dedupe_playwright_imports(code: str) -> Tuple[str, List[str]]:
     notes: List[str] = []
@@ -664,6 +670,31 @@ def _ensure_referenced_variables(
             updated_data[key] = _todo_value_for_key(key)
             notes.append(f"Se agrego testData.{key} como TODO porque el codigo lo referenciaba.")
     return updated_selectors, updated_data, notes
+
+
+def _move_direct_text_waits_to_selectors(
+    code: str,
+    selectors: Dict[str, str],
+) -> Tuple[str, Dict[str, str], List[str]]:
+    notes: List[str] = []
+    updated = dict(selectors or {})
+    pattern = re.compile(r"page\.waitForSelector\(\s*(['\"])text=([^'\"]+)\1\s*\)")
+
+    def replacement(match: re.Match) -> str:
+        label = match.group(2).strip()
+        key = _camel_from_label(f"{label} text", "textoVisible")
+        suffix = 2
+        base_key = key
+        while key in updated and updated[key] != f"TODO_SELECTOR_{key}":
+            key = f"{base_key}{suffix}"
+            suffix += 1
+        updated[key] = _normalize_todo_selector(f"TODO_SELECTOR_{key}")
+        notes.append(
+            f"Se movio la espera por texto '{label}' a selectors.{key} para que el QA confirme el selector real."
+        )
+        return f"page.waitForSelector(selectors.{key})"
+
+    return pattern.sub(replacement, code), updated, list(dict.fromkeys(notes))
 
 
 def _replace_const_object(code: str, object_name: str, values: Dict[str, str]) -> str:
@@ -882,11 +913,11 @@ def _deterministic_findings(
     functional_values: List[Tuple[str, str]] = []
     for raw_line in str(payload.get("description", "")).splitlines():
         line = raw_line.strip().lstrip("-").strip()
-        match = re.match(r'["“]?([^:"]{2,80})["”]?\s*:\s*(.+)$', line)
+        match = re.match(r'["â€œ]?([^:"]{2,80})["â€]?\s*:\s*(.+)$', line)
         if not match:
             continue
-        field = match.group(1).strip(" \"“”")
-        value = match.group(2).strip().strip(" \"“”.,")
+        field = match.group(1).strip(" \"â€œâ€")
+        value = match.group(2).strip().strip(" \"â€œâ€.,")
         value = re.split(r"\s+\(|\s+[Yy]\s+luego\b|\s+[Hh]acer clic\b", value, maxsplit=1)[0].strip()
         if not value or value.lower().startswith(("hacer ", "seleccionar ", "cliquear ", "fecha del dia")):
             continue
@@ -1095,6 +1126,7 @@ def _reviewed_result(
     code, test_data, literal_notes = _move_business_literals_to_test_data(code, payload, test_data)
     code, test_data, sanitize_notes = _sanitize_unconfirmed_business_data(code, payload, test_data)
     test_data = _normalize_todo_test_data(test_data)
+    code, selectors, direct_wait_notes = _move_direct_text_waits_to_selectors(code, selectors)
     selectors, test_data, referenced_notes = _ensure_referenced_variables(code, selectors, test_data)
     code = _replace_selectors_object(code, selectors)
     code = _replace_test_data_object(code, test_data)
@@ -1104,6 +1136,7 @@ def _reviewed_result(
     notes.extend(selector_group_notes)
     notes.extend(literal_notes)
     notes.extend(sanitize_notes)
+    notes.extend(direct_wait_notes)
     notes.extend(referenced_notes)
     if extra_note:
         notes.append(extra_note)
