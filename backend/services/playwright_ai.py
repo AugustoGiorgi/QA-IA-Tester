@@ -434,6 +434,41 @@ def _looks_like_business_value(key: str, value: str) -> bool:
     return business_key and business_shape
 
 
+def _todo_value_for_key(key: str) -> str:
+    label = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", str(key or "dato"))
+    label = re.sub(r"[^a-zA-Z0-9]+", "_", label).strip("_").upper()
+    return f"TODO_{label or 'DATO'}"
+
+
+def _replace_test_data_value_in_code(code: str, key: str, old_value: str, new_value: str) -> str:
+    escaped_key = re.escape(key)
+    pattern = re.compile(
+        rf"({escaped_key}\s*:\s*)(['\"]){re.escape(str(old_value))}\2",
+        re.M,
+    )
+    return pattern.sub(lambda match: f"{match.group(1)}'{new_value}'", code)
+
+
+def _sanitize_unconfirmed_business_data(
+    code: str,
+    payload: Dict[str, str],
+    test_data: Dict[str, str],
+) -> Tuple[str, Dict[str, str], List[str]]:
+    source = _normalized(_source_blob(payload))
+    sanitized = {str(key): str(value) for key, value in (test_data or {}).items()}
+    notes: List[str] = []
+    for key, value in list(sanitized.items()):
+        if not _looks_like_business_value(key, value):
+            continue
+        if _normalized(value) in source:
+            continue
+        replacement = _todo_value_for_key(key)
+        code = _replace_test_data_value_in_code(code, key, value, replacement)
+        sanitized[key] = replacement
+        notes.append(f"Se reemplazo testData.{key} por {replacement} porque no estaba confirmado por la entrada.")
+    return code, sanitized, notes
+
+
 def _deterministic_findings(
     code: str,
     payload: Dict[str, str],
@@ -729,8 +764,11 @@ def _reviewed_result(
         or _extract_json_object(code, "testData")
         or generated.get("test_data", {})
     )
+    test_data = {str(key): str(value) for key, value in (test_data or {}).items()}
+    code, test_data, sanitize_notes = _sanitize_unconfirmed_business_data(code, payload, test_data)
     findings = _deterministic_findings(code, payload, selectors, test_data)
     notes = [str(item) for item in audit_data.get("ai_notes", generated.get("ai_notes", []))]
+    notes.extend(sanitize_notes)
     if extra_note:
         notes.append(extra_note)
     warnings = [str(item) for item in audit_data.get("warnings", [])]
