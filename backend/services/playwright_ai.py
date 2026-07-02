@@ -458,6 +458,16 @@ def _normalize_todo_selector(value: str) -> str:
     return "TODO_SELECTOR" + (f"_{suffix}" if suffix else "")
 
 
+def _normalize_todo_data_value(value: str) -> str:
+    text = str(value or "").strip()
+    if not text.upper().startswith("TODO"):
+        return text
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
+    ascii_text = re.sub(r"[^a-zA-Z0-9]+", "_", ascii_text).strip("_").upper()
+    return ascii_text or "TODO_DATO"
+
+
 def _replace_test_data_value_in_code(code: str, key: str, old_value: str, new_value: str) -> str:
     escaped_key = re.escape(key)
     pattern = re.compile(
@@ -471,8 +481,12 @@ def _normalize_todo_selectors(selectors: Dict[str, str]) -> Dict[str, str]:
     return {str(key): _normalize_todo_selector(str(value)) for key, value in (selectors or {}).items()}
 
 
-def _replace_test_data_object(code: str, test_data: Dict[str, str]) -> str:
-    declaration = re.compile(r"\bconst\s+testData\s*=\s*\{")
+def _normalize_todo_test_data(test_data: Dict[str, str]) -> Dict[str, str]:
+    return {str(key): _normalize_todo_data_value(str(value)) for key, value in (test_data or {}).items()}
+
+
+def _replace_const_object(code: str, object_name: str, values: Dict[str, str]) -> str:
+    declaration = re.compile(rf"\bconst\s+{re.escape(object_name)}\s*=\s*\{{")
     match = declaration.search(code)
     if not match:
         return code
@@ -504,12 +518,20 @@ def _replace_test_data_object(code: str, test_data: Dict[str, str]) -> str:
     if close < 0:
         return code
     end = close + 2 if code[close + 1:close + 2] == ";" else close + 1
-    lines = ["const testData = {"]
-    for key, value in test_data.items():
+    lines = [f"const {object_name} = {{"]
+    for key, value in values.items():
         safe_value = str(value).replace("\\", "\\\\").replace("'", "\\'")
         lines.append(f"  {key}: '{safe_value}',")
     lines.append("};")
     return code[:match.start()] + "\n".join(lines) + code[end:]
+
+
+def _replace_test_data_object(code: str, test_data: Dict[str, str]) -> str:
+    return _replace_const_object(code, "testData", test_data)
+
+
+def _replace_selectors_object(code: str, selectors: Dict[str, str]) -> str:
+    return _replace_const_object(code, "selectors", selectors)
 
 
 def _move_business_literals_to_test_data(
@@ -867,8 +889,12 @@ def _reviewed_result(
     )
     test_data = {str(key): str(value) for key, value in (test_data or {}).items()}
     selectors = _normalize_todo_selectors(selectors)
+    test_data = _normalize_todo_test_data(test_data)
     code, test_data, literal_notes = _move_business_literals_to_test_data(code, payload, test_data)
     code, test_data, sanitize_notes = _sanitize_unconfirmed_business_data(code, payload, test_data)
+    test_data = _normalize_todo_test_data(test_data)
+    code = _replace_selectors_object(code, selectors)
+    code = _replace_test_data_object(code, test_data)
     findings = _deterministic_findings(code, payload, selectors, test_data)
     notes = [str(item) for item in audit_data.get("ai_notes", generated.get("ai_notes", []))]
     notes.extend(literal_notes)
