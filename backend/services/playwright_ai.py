@@ -42,7 +42,7 @@ class GeneratedUpdateIn(BaseModel):
 
 
 MAX_CODE_LENGTH = 80000
-MAX_VIDEO_FRAMES = 20
+MAX_VIDEO_FRAMES = 16
 
 
 def _clean(value: Optional[str], max_len: int = 4000) -> str:
@@ -326,51 +326,65 @@ def _image_part(path: Path) -> Dict[str, Any]:
     return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{data}"}}
 
 
+def _frame_batches(frames: List[Path]) -> List[List[Path]]:
+    if len(frames) <= 8:
+        return [frames]
+    batches = [frames]
+    batches.append(frames[::2][:8])
+    checkpoints = [frames[0], frames[len(frames) // 3], frames[(len(frames) * 2) // 3], frames[-1]]
+    unique_checkpoints = list(dict.fromkeys(checkpoints))
+    if len(unique_checkpoints) >= 2:
+        batches.append(unique_checkpoints)
+    return batches
+
+
 def _generate_with_vision(payload: Dict[str, str], frames: List[Path]) -> Optional[Dict[str, Any]]:
     if not frames:
         return None
-    try:
-        prompt = (
-            "Analiza cronologicamente estos frames de un video de paso a paso e identifica pantallas, campos, "
-            "iconos, ventanas, solapas, selecciones y confirmaciones. Usa descripcion, observaciones, codegen "
-            "y selectores aportados para completar lo que no se ve. "
-            + _generation_rules()
-            + " "
-            + _video_generation_rules()
-            + " "
-            "Responde JSON estricto con generated_code, selectors, test_data, ai_notes. "
-            "Contexto:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
-        )
+    prompt = (
+        "Analiza cronologicamente estos frames de un video de paso a paso e identifica pantallas, campos, "
+        "iconos, ventanas, solapas, selecciones y confirmaciones. Usa descripcion, observaciones, codegen "
+        "y selectores aportados para completar lo que no se ve. "
+        + _generation_rules()
+        + " "
+        + _video_generation_rules()
+        + " "
+        "Responde JSON estricto con generated_code, selectors, test_data, ai_notes. "
+        "Contexto:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
+    )
+    for frame_batch in _frame_batches(frames):
         content: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
-        content.extend(_image_part(frame) for frame in frames)
-        resp = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Sos un arquitecto senior de automatizacion Playwright con vision. "
-                        "Tu prioridad es detectar todos los procesos funcionales del video antes de escribir codigo. "
-                        "Devuelve solamente JSON valido y no omitas acciones ni procesos observados."
-                    ),
-                },
-                {"role": "user", "content": content},
-            ],
-            temperature=0.15,
-            max_tokens=16000,
-            response_format={"type": "json_object"},
-        )
-        data = _parse_ai_json(resp.choices[0].message.content or "")
-        if not data or not data.get("generated_code"):
-            return None
-        return {
-            "generated_code": _clean(data.get("generated_code"), MAX_CODE_LENGTH),
-            "selectors": data.get("selectors") or {},
-            "test_data": data.get("test_data") or {},
-            "ai_notes": data.get("ai_notes") or ["Codigo generado analizando frames del video."],
-        }
-    except Exception:
-        return None
+        content.extend(_image_part(frame) for frame in frame_batch)
+        try:
+            resp = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Sos un arquitecto senior de automatizacion Playwright con vision. "
+                            "Tu prioridad es detectar todos los procesos funcionales del video antes de escribir codigo. "
+                            "Devuelve solamente JSON valido y no omitas acciones ni procesos observados."
+                        ),
+                    },
+                    {"role": "user", "content": content},
+                ],
+                temperature=0.15,
+                max_tokens=10000,
+                response_format={"type": "json_object"},
+            )
+            data = _parse_ai_json(resp.choices[0].message.content or "")
+            if not data or not data.get("generated_code"):
+                continue
+            return {
+                "generated_code": _clean(data.get("generated_code"), MAX_CODE_LENGTH),
+                "selectors": data.get("selectors") or {},
+                "test_data": data.get("test_data") or {},
+                "ai_notes": data.get("ai_notes") or ["Codigo generado analizando frames del video."],
+            }
+        except Exception:
+            continue
+    return None
 
 
 def _audit_prompt(payload: Dict[str, str], generated: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -799,13 +813,14 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
             vision["test_data"] = _extract_json_object(vision["generated_code"], "testData") or fallback["test_data"]
         return _audit_generated(payload, vision)
     if video_path:
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                "La IA no pudo analizar correctamente las capturas del video. "
-                "No se genero codigo usando solamente suposiciones textuales."
+        fallback["ai_notes"].insert(
+            0,
+            (
+                "La IA no pudo analizar las capturas del video con suficiente estabilidad. "
+                "Se genero un borrador minimo para completar manualmente con los datos observados."
             ),
         )
+        return _reviewed_result(payload, fallback)
     try:
         response = client.chat.completions.create(
             model=MODEL,
