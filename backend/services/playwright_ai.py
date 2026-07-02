@@ -147,11 +147,17 @@ def _generation_rules() -> str:
         "autocompletados, confirmaciones y guardados cuando aparezcan. "
         "No inventes credenciales, polizas, clientes ni IDs: crea una entrada especifica en testData con valor "
         "TODO por cada dato desconocido y UTILIZALA en el paso correspondiente. No declares variables sin uso. "
+        "Nunca inventes codigos de transaccion, codigos de siniestro, numeros de poliza, fechas, agencias, "
+        "productos, clientes ni valores de combos. Si no fueron escritos por el usuario o no aparecen con claridad "
+        "en codegen/selectores/contexto tecnico, usa TODO_NOMBRE_DATO. "
         "Incluye tambien como variables los datos conocidos que el QA podria querer cambiar. "
         "No supongas que un control es input, select o button sin evidencia tecnica. Si falta esa evidencia, "
         "crea una entrada especifica en selectors con un selector provisional descriptivo que contenga TODO "
         "y utilizala en el codigo. Cada modal, agenda, solapa y boton repetido debe tener su propio selector "
         "o quedar acotado mediante un locator padre. "
+        "Cuando la entrada venga de video sin codegen ni selectores reales, los selectores deben quedar como "
+        "TODO_SELECTOR_nombre_descriptivo; no uses input[name=...], button:has-text(...), ids, clases ni textos "
+        "exactos como si fueran reales. "
         "Nunca hagas fill sobre botones ni selectOption sobre elementos sin evidencia de que sean select. "
         "Usa nombres especificos, nunca firstInput, firstActionButton o submitButton. "
         "Prioriza codegen y selectores aportados; luego getByRole, getByLabel, getByPlaceholder y getByText. "
@@ -379,6 +385,55 @@ def _normalized(value: Any) -> str:
     return "".join(char for char in text if not unicodedata.combining(char)).lower()
 
 
+def _source_blob(payload: Dict[str, str]) -> str:
+    return "\n".join(
+        str(payload.get(key, ""))
+        for key in (
+            "title",
+            "requirement_id",
+            "module",
+            "initial_url",
+            "description",
+            "observations",
+            "codegen",
+            "selector_context",
+        )
+    )
+
+
+def _has_technical_context(payload: Dict[str, str]) -> bool:
+    return bool(_clean(payload.get("codegen")) or _clean(payload.get("selector_context")))
+
+
+def _looks_like_real_selector(value: str) -> bool:
+    selector = str(value or "").strip()
+    if not selector or "TODO" in selector.upper():
+        return False
+    return bool(
+        re.search(r"\b(input|button|select|textarea|form|nav|a|div|span)\b", selector, re.I)
+        or re.search(r"[\[#.]|:has-text|text=|name=|data-testid|xpath=", selector, re.I)
+    )
+
+
+def _looks_like_business_value(key: str, value: str) -> bool:
+    text = str(value or "").strip()
+    if not text or text.upper().startswith("TODO"):
+        return False
+    lowered_key = _normalized(key)
+    if any(token in lowered_key for token in ("username", "password")):
+        return False
+    business_key = any(
+        token in lowered_key
+        for token in (
+            "claim", "siniestro", "policy", "poliza", "client", "cliente", "agency", "agencia",
+            "product", "producto", "date", "fecha", "code", "codigo", "transaction", "transaccion",
+            "coverage", "cobertura",
+        )
+    )
+    business_shape = bool(re.search(r"\d", text)) or len(text.split()) <= 4
+    return business_key and business_shape
+
+
 def _deterministic_findings(
     code: str,
     payload: Dict[str, str],
@@ -433,13 +488,20 @@ def _deterministic_findings(
         if action == "click" and kind in {"input", "textarea"}:
             warnings.append(f"Se hace click sobre {key}; verifica si la accion correcta era fill.")
 
-    source = _normalized(
-        " ".join(
-            str(payload.get(key, ""))
-            for key in ("description", "observations", "codegen", "selector_context")
-        )
-    )
+    raw_source = _source_blob(payload)
+    source = _normalized(raw_source)
     technical_source = payload.get("codegen", "") + "\n" + payload.get("selector_context", "")
+    if not _has_technical_context(payload):
+        invented_selectors = [
+            key for key, value in selectors.items()
+            if _looks_like_real_selector(value)
+        ]
+        if invented_selectors:
+            critical.append(
+                "No se aporto codegen ni contexto tecnico, pero el codigo inventa selectores reales para: "
+                + ", ".join(invented_selectors[:12])
+                + ". Deben quedar como TODO_SELECTOR_*."
+            )
     direct_css_actions = re.findall(
         r"page\.(?:click|fill|selectOption)\(\s*(['\"])(.*?)\1",
         code,
@@ -500,6 +562,12 @@ def _deterministic_findings(
             )
 
     for key, value in test_data.items():
+        normalized_value = _normalized(value)
+        if _looks_like_business_value(key, value) and normalized_value not in source:
+            critical.append(
+                f"El dato testData.{key}='{value}' parece inventado o no confirmado por la entrada. "
+                "Debe quedar como TODO hasta que el QA lo complete."
+            )
         if str(value).strip().lower().startswith("todo") and not re.search(
             rf"\btestData\.{re.escape(key)}\b",
             code,
@@ -619,6 +687,9 @@ def _repair_generated(
                     "Sos el reparador final de un spec Playwright. Corrige obligatoriamente todos los defectos "
                     "indicados. No ocultes un defecto cambiando solamente las notas. Si falta informacion real, "
                     "deja una variable TODO y una accion tecnicamente compatible. No inventes assertions. "
+                    "Si se detectaron selectores inventados, reemplazalos por valores TODO_SELECTOR_* dentro del "
+                    "objeto selectors y conserva las acciones referenciando selectors.nombre. Si se detectaron datos "
+                    "de negocio inventados, reemplazalos por TODO_* dentro de testData. "
                     + _generation_rules()
                     + " Devuelve JSON con generated_code, selectors, test_data, ai_notes, covered_steps, "
                     "manual_actions y warnings."
