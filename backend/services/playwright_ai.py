@@ -42,7 +42,7 @@ class GeneratedUpdateIn(BaseModel):
 
 
 MAX_CODE_LENGTH = 80000
-MAX_VIDEO_FRAMES = 10
+MAX_VIDEO_FRAMES = 16
 
 
 def _clean(value: Optional[str], max_len: int = 4000) -> str:
@@ -266,7 +266,9 @@ def _extract_video_frames(video_path: Optional[Path]) -> Tuple[List[Path], str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     interval = max((_video_duration(video_path, ffmpeg_executable) or 72) / MAX_VIDEO_FRAMES, 2)
     attempts = [
+        f"fps=1/{interval:.2f},scale=1280:-2",
         f"fps=1/{interval:.2f},scale=960:-2",
+        "fps=1/5,scale=960:-2",
         "thumbnail,scale=960:-2",
     ]
     errors: List[str] = []
@@ -293,10 +295,10 @@ def _extract_video_frames(video_path: Optional[Path]) -> Tuple[List[Path], str]:
                 command,
                 capture_output=True,
                 text=True,
-                timeout=25,
+                timeout=120,
             )
         except subprocess.TimeoutExpired:
-            errors.append(f"Intento {index}: FFmpeg excedio los 25 segundos.")
+            errors.append(f"Intento {index}: FFmpeg excedio los 120 segundos.")
             continue
         except Exception as exc:
             errors.append(f"Intento {index}: {type(exc).__name__}.")
@@ -325,10 +327,10 @@ def _image_part(path: Path) -> Dict[str, Any]:
 
 
 def _frame_batches(frames: List[Path]) -> List[List[Path]]:
-    if len(frames) <= 6:
+    if len(frames) <= 8:
         return [frames]
     batches = [frames]
-    batches.append(frames[::2][:6])
+    batches.append(frames[::2][:8])
     checkpoints = [frames[0], frames[len(frames) // 3], frames[(len(frames) * 2) // 3], frames[-1]]
     unique_checkpoints = list(dict.fromkeys(checkpoints))
     if len(unique_checkpoints) >= 2:
@@ -811,12 +813,6 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
             vision["selectors"] = _extract_json_object(vision["generated_code"], "selectors") or fallback["selectors"]
         if not vision["test_data"]:
             vision["test_data"] = _extract_json_object(vision["generated_code"], "testData") or fallback["test_data"]
-        if video_path:
-            return _reviewed_result(
-                payload,
-                vision,
-                extra_note="El modo video se entrega como borrador rapido. Usa la auditoria manual si queres una segunda revision.",
-            )
         return _audit_generated(payload, vision)
     if video_path:
         fallback["ai_notes"].insert(

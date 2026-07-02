@@ -172,29 +172,11 @@ async function generateAi(event) {
     fd.append('observations', $('pwObservations').value.trim());
     fd.append('codegen', $('pwCodegen').value.trim());
     fd.append('selector_context', $('pwSelectorContext').value.trim());
-    if (mode === 'video' && $('pwVideo').files.length) {
-      const file = $('pwVideo').files[0];
-      if (file.size > 95 * 1024 * 1024) {
-        throw new Error('El video supera 95 MB. Comprimilo o recortalo para evitar que Render corte la subida.');
-      }
-      fd.append('video', file);
-    }
+    if (mode === 'video' && $('pwVideo').files.length) fd.append('video', $('pwVideo').files[0]);
 
     const res = await authFetch('/api/playwright/ai/generate', { method: 'POST', body: fd });
-    const raw = await res.text().catch(() => '');
-    let data = {};
-    try {
-      data = raw ? JSON.parse(raw) : {};
-    } catch {
-      data = {};
-    }
-    if (!res.ok) {
-      const detail = apiError(data, '');
-      const clean = raw.replace(/\s+/g, ' ').trim();
-      throw new Error(detail || (clean
-        ? `No se pudo generar el codigo. HTTP ${res.status}: ${clean.slice(0, 240)}`
-        : `No se pudo generar el codigo. HTTP ${res.status}.`));
-    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(apiError(data, 'No se pudo generar el codigo.'));
     setRecord(data.record);
     const pending = Array.isArray(data.record?.manual_actions) ? data.record.manual_actions.length : 0;
     setStatus(
