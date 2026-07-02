@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import base64
+import ast
 import re
 import shutil
 import subprocess
@@ -171,6 +172,8 @@ def _generation_rules() -> str:
         "Incluye assertions intermedias y finales solo para resultados conocidos. No inventes mensajes de exito. "
         "Si falta el resultado esperado, deja un comentario TODO_ASSERTION y explicalo en ai_notes, sin inventarlo. "
         "Marca en ai_notes una checklist concreta de selectores, datos y assertions que el QA debe completar. "
+        "El objeto selectors debe ser plano: usa keys como loginUsuarioInput, sin objetos anidados y sin strings "
+        "que contengan JSON o diccionarios. El objeto test_data tambien debe ser plano. "
         "El codigo debe compilar luego de completar unicamente valores TODO y selectores provisionales. "
         "Devuelve selectors y test_data completos porque la interfaz los presentara como campos editables."
     )
@@ -483,6 +486,53 @@ def _normalize_todo_selectors(selectors: Dict[str, str]) -> Dict[str, str]:
 
 def _normalize_todo_test_data(test_data: Dict[str, str]) -> Dict[str, str]:
     return {str(key): _normalize_todo_data_value(str(value)) for key, value in (test_data or {}).items()}
+
+
+def _cap_first(value: str) -> str:
+    text = str(value or "")
+    return text[:1].upper() + text[1:] if text else ""
+
+
+def _parse_selector_group(value: Any) -> Optional[Dict[str, str]]:
+    if isinstance(value, dict):
+        return {str(key): str(item) for key, item in value.items()}
+    text = str(value or "").strip()
+    if not (text.startswith("{") and text.endswith("}")):
+        return None
+    for parser in (json.loads, ast.literal_eval):
+        try:
+            parsed = parser(text)
+        except Exception:
+            continue
+        if isinstance(parsed, dict):
+            return {str(key): str(item) for key, item in parsed.items()}
+    return None
+
+
+def _flatten_selector_groups(
+    code: str,
+    selectors: Dict[str, Any],
+) -> Tuple[str, Dict[str, str], List[str]]:
+    flat: Dict[str, str] = {}
+    notes: List[str] = []
+    for group_key, group_value in (selectors or {}).items():
+        group_name = str(group_key)
+        group = _parse_selector_group(group_value)
+        if not group:
+            flat[group_name] = str(group_value)
+            continue
+        notes.append(
+            f"Se normalizo el grupo de selectores {group_name} a claves planas para que el codigo compile."
+        )
+        for child_key, child_value in group.items():
+            flat_key = f"{group_name}{_cap_first(child_key)}"
+            flat[flat_key] = str(child_value)
+            code = re.sub(
+                rf"\bselectors\.{re.escape(group_name)}\.{re.escape(child_key)}\b",
+                f"selectors.{flat_key}",
+                code,
+            )
+    return code, flat, notes
 
 
 def _replace_const_object(code: str, object_name: str, values: Dict[str, str]) -> str:
@@ -888,6 +938,7 @@ def _reviewed_result(
         or generated.get("test_data", {})
     )
     test_data = {str(key): str(value) for key, value in (test_data or {}).items()}
+    code, selectors, selector_group_notes = _flatten_selector_groups(code, selectors)
     selectors = _normalize_todo_selectors(selectors)
     test_data = _normalize_todo_test_data(test_data)
     code, test_data, literal_notes = _move_business_literals_to_test_data(code, payload, test_data)
@@ -897,6 +948,7 @@ def _reviewed_result(
     code = _replace_test_data_object(code, test_data)
     findings = _deterministic_findings(code, payload, selectors, test_data)
     notes = [str(item) for item in audit_data.get("ai_notes", generated.get("ai_notes", []))]
+    notes.extend(selector_group_notes)
     notes.extend(literal_notes)
     notes.extend(sanitize_notes)
     if extra_note:
