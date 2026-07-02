@@ -798,15 +798,13 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
     )
     frames, video_error = _extract_video_frames(video_path)
     if video_path and not frames:
-        fallback["ai_notes"].insert(
-            0,
-            (
-                "No se pudieron extraer capturas del video. "
-                "Se genero un borrador minimo para que el QA lo complete manualmente."
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "No se pudieron extraer capturas del video. Verifica que el archivo no este danado."
                 + _video_extraction_detail(video_error)
             ),
         )
-        return _reviewed_result(payload, fallback)
     vision = _generate_with_vision(payload, frames)
     if vision:
         if not vision["selectors"]:
@@ -925,37 +923,20 @@ async def generate_playwright(
             "Las observaciones, codegen y selectores aportados complementan los elementos no visibles."
         ),
     }
-    try:
-        generated = _generate_with_ai(payload, _video_path(video_name))
-        now = datetime.utcnow()
-        doc = {
-            **payload,
-            **generated,
-            "created_by": user["username"],
-            "created_by_name": user.get("full_name") or "",
-            "created_at": now,
-            "updated_at": now,
-        }
-        result = await _db()[COLLECTION].insert_one(doc)
-        doc["_id"] = result.inserted_id
-        try:
-            await record_activity(
-                user,
-                "Generacion Playwright",
-                "playwright",
-                f"Genero prueba: {doc['title']}",
-                {"record_id": str(result.inserted_id), "mode": clean_mode},
-            )
-        except Exception:
-            pass
-        return {"record": _as_public(doc)}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"No se pudo generar o guardar el codigo Playwright ({type(exc).__name__}).",
-        ) from exc
+    generated = _generate_with_ai(payload, _video_path(video_name))
+    now = datetime.utcnow()
+    doc = {
+        **payload,
+        **generated,
+        "created_by": user["username"],
+        "created_by_name": user.get("full_name") or "",
+        "created_at": now,
+        "updated_at": now,
+    }
+    result = await _db()[COLLECTION].insert_one(doc)
+    doc["_id"] = result.inserted_id
+    await record_activity(user, "Generacion Playwright", "playwright", f"Genero prueba: {doc['title']}", {"record_id": str(result.inserted_id), "mode": clean_mode})
+    return {"record": _as_public(doc)}
 
 
 @router.get("/generated")
