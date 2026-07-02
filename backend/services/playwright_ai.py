@@ -440,6 +440,24 @@ def _todo_value_for_key(key: str) -> str:
     return f"TODO_{label or 'DATO'}"
 
 
+def _camel_from_label(value: str, fallback: str = "value") -> str:
+    parts = re.findall(r"[a-zA-Z0-9]+", str(value or ""))
+    if not parts:
+        return fallback
+    first, *rest = parts
+    return first[:1].lower() + first[1:] + "".join(part[:1].upper() + part[1:] for part in rest)
+
+
+def _normalize_todo_selector(value: str) -> str:
+    text = str(value or "").strip()
+    if not text.upper().startswith("TODO_SELECTOR"):
+        return text
+    suffix = text[len("TODO_SELECTOR"):].strip("_")
+    suffix = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", suffix)
+    suffix = re.sub(r"[^a-zA-Z0-9]+", "_", suffix).strip("_").upper()
+    return "TODO_SELECTOR" + (f"_{suffix}" if suffix else "")
+
+
 def _replace_test_data_value_in_code(code: str, key: str, old_value: str, new_value: str) -> str:
     escaped_key = re.escape(key)
     pattern = re.compile(
@@ -447,6 +465,89 @@ def _replace_test_data_value_in_code(code: str, key: str, old_value: str, new_va
         re.M,
     )
     return pattern.sub(lambda match: f"{match.group(1)}'{new_value}'", code)
+
+
+def _normalize_todo_selectors(selectors: Dict[str, str]) -> Dict[str, str]:
+    return {str(key): _normalize_todo_selector(str(value)) for key, value in (selectors or {}).items()}
+
+
+def _replace_test_data_object(code: str, test_data: Dict[str, str]) -> str:
+    declaration = re.compile(r"\bconst\s+testData\s*=\s*\{")
+    match = declaration.search(code)
+    if not match:
+        return code
+    open_index = code.find("{", match.start())
+    depth = 0
+    quote = ""
+    escaped = False
+    close = -1
+    for index in range(open_index, len(code)):
+        char = code[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                close = index
+                break
+    if close < 0:
+        return code
+    end = close + 2 if code[close + 1:close + 2] == ";" else close + 1
+    lines = ["const testData = {"]
+    for key, value in test_data.items():
+        safe_value = str(value).replace("\\", "\\\\").replace("'", "\\'")
+        lines.append(f"  {key}: '{safe_value}',")
+    lines.append("};")
+    return code[:match.start()] + "\n".join(lines) + code[end:]
+
+
+def _move_business_literals_to_test_data(
+    code: str,
+    payload: Dict[str, str],
+    test_data: Dict[str, str],
+) -> Tuple[str, Dict[str, str], List[str]]:
+    source = _normalized(_source_blob(payload))
+    notes: List[str] = []
+    updated = dict(test_data)
+    pattern = re.compile(
+        r"page\.(fill|selectOption)\(\s*selectors\.(\w+)\s*,\s*(['\"])(.*?)\3\s*\)",
+        re.S,
+    )
+
+    def replacement(match: re.Match) -> str:
+        action, selector_key, _, literal = match.groups()
+        if not literal or literal.startswith("TODO_") or literal.startswith("TODO_SELECTOR"):
+            return match.group(0)
+        if _normalized(literal) in source:
+            data_key = _camel_from_label(selector_key.replace("Input", "").replace("Dropdown", ""), "dato")
+            suffix = 2
+            base_key = data_key
+            while data_key in updated and updated[data_key] != literal:
+                data_key = f"{base_key}{suffix}"
+                suffix += 1
+            updated[data_key] = literal
+            notes.append(f"Se movio el literal '{literal}' a testData.{data_key}.")
+            return f"page.{action}(selectors.{selector_key}, testData.{data_key})"
+        data_key = _camel_from_label(selector_key.replace("Input", "").replace("Dropdown", ""), "dato")
+        updated[data_key] = _todo_value_for_key(data_key)
+        notes.append(f"Se reemplazo el literal no confirmado '{literal}' por testData.{data_key}.")
+        return f"page.{action}(selectors.{selector_key}, testData.{data_key})"
+
+    new_code = pattern.sub(replacement, code)
+    if updated != test_data:
+        new_code = _replace_test_data_object(new_code, updated)
+    return new_code, updated, notes
 
 
 def _sanitize_unconfirmed_business_data(
@@ -765,9 +866,12 @@ def _reviewed_result(
         or generated.get("test_data", {})
     )
     test_data = {str(key): str(value) for key, value in (test_data or {}).items()}
+    selectors = _normalize_todo_selectors(selectors)
+    code, test_data, literal_notes = _move_business_literals_to_test_data(code, payload, test_data)
     code, test_data, sanitize_notes = _sanitize_unconfirmed_business_data(code, payload, test_data)
     findings = _deterministic_findings(code, payload, selectors, test_data)
     notes = [str(item) for item in audit_data.get("ai_notes", generated.get("ai_notes", []))]
+    notes.extend(literal_notes)
     notes.extend(sanitize_notes)
     if extra_note:
         notes.append(extra_note)
