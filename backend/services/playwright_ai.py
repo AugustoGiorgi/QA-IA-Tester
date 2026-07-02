@@ -227,36 +227,77 @@ def _video_duration(video_path: Path, ffmpeg_executable: str) -> Optional[float]
         return None
 
 
-def _extract_video_frames(video_path: Optional[Path]) -> List[Path]:
+def _error_tail(value: str, max_len: int = 700) -> str:
+    clean = re.sub(r"\s+", " ", value or "").strip()
+    if len(clean) <= max_len:
+        return clean
+    return clean[-max_len:]
+
+
+def _extract_video_frames(video_path: Optional[Path]) -> Tuple[List[Path], str]:
     ffmpeg_executable = _ffmpeg_executable()
-    if not video_path or not video_path.exists() or not ffmpeg_executable:
-        return []
+    if not video_path or not video_path.exists():
+        return [], "El archivo subido no existe o no quedo disponible en el servidor."
+    if not ffmpeg_executable:
+        return [], "FFmpeg no esta disponible en el servidor."
     stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
     out_dir = FRAME_DIR / stamp
     out_dir.mkdir(parents=True, exist_ok=True)
-    pattern = str(out_dir / "frame_%03d.jpg")
     interval = max((_video_duration(video_path, ffmpeg_executable) or 72) / MAX_VIDEO_FRAMES, 2)
-    try:
-        subprocess.run(
-            [
-                ffmpeg_executable,
-                "-y",
-                "-i",
-                str(video_path),
-                "-vf",
-                f"fps=1/{interval:.2f},scale=1280:-1",
-                "-frames:v",
-                str(MAX_VIDEO_FRAMES),
-                pattern,
-            ],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=45,
-        )
-        return sorted(out_dir.glob("frame_*.jpg"))[:MAX_VIDEO_FRAMES]
-    except Exception:
-        return []
+    attempts = [
+        f"fps=1/{interval:.2f},scale=1280:-2",
+        f"fps=1/{interval:.2f},scale=960:-2",
+        "fps=1/5,scale=960:-2",
+        "thumbnail,scale=960:-2",
+    ]
+    errors: List[str] = []
+    for index, video_filter in enumerate(attempts, start=1):
+        attempt_dir = out_dir / f"try_{index}"
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        pattern = str(attempt_dir / "frame_%03d.jpg")
+        command = [
+            ffmpeg_executable,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(video_path),
+            "-vf",
+            video_filter,
+            "-frames:v",
+            str(MAX_VIDEO_FRAMES),
+            pattern,
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            errors.append(f"Intento {index}: FFmpeg excedio los 120 segundos.")
+            continue
+        except Exception as exc:
+            errors.append(f"Intento {index}: {type(exc).__name__}.")
+            continue
+        frames = sorted(attempt_dir.glob("frame_*.jpg"))[:MAX_VIDEO_FRAMES]
+        if result.returncode == 0 and frames:
+            return frames, ""
+        detail = _error_tail(result.stderr or result.stdout or f"FFmpeg termino con codigo {result.returncode}.")
+        errors.append(f"Intento {index}: {detail}")
+    error_detail = _error_tail(" | ".join(error for error in errors if error))
+    if not error_detail:
+        error_detail = "FFmpeg no genero imagenes del video."
+    return [], error_detail
+
+
+def _video_extraction_detail(error_detail: str) -> str:
+    if not error_detail:
+        return ""
+    return f" Detalle tecnico: {error_detail}"
+
 
 
 def _image_part(path: Path) -> Dict[str, Any]:
@@ -712,11 +753,14 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
         payload.get("description", ""),
         payload.get("observations", ""),
     )
-    frames = _extract_video_frames(video_path)
+    frames, video_error = _extract_video_frames(video_path)
     if video_path and not frames:
         raise HTTPException(
             status_code=502,
-            detail="No se pudieron extraer capturas del video. Verifica FFmpeg y que el archivo no este dañado.",
+            detail=(
+                "No se pudieron extraer capturas del video. Verifica que el archivo no este danado."
+                + _video_extraction_detail(video_error)
+            ),
         )
     vision = _generate_with_vision(payload, frames)
     if vision:
