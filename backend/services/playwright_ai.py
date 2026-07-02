@@ -42,7 +42,7 @@ class GeneratedUpdateIn(BaseModel):
 
 
 MAX_CODE_LENGTH = 80000
-MAX_VIDEO_FRAMES = 20
+MAX_VIDEO_FRAMES = 12
 
 
 def _clean(value: Optional[str], max_len: int = 4000) -> str:
@@ -143,9 +143,6 @@ def _generation_rules() -> str:
         "El objetivo es generar un scaffold Playwright de alta calidad para que un QA lo termine, no prometer "
         "ejecucion inmediata sin conocer el DOM real. Genera TypeScript con @playwright/test completo y mantenible. "
         "Transforma TODOS los pasos funcionales identificables en acciones trazables con comentarios // Paso N. "
-        "Si la entrada contiene mas de un proceso, flujo, transaccion o camino funcional, NO elijas uno solo: "
-        "segmenta el material en procesos detectados y genera un test independiente por cada proceso dentro del "
-        "mismo describe, reutilizando login y helpers cuando corresponda. "
         "Conserva el orden e incluye login, navegacion, modales, dialogs, iframes, pestanas, agendas, tablas, "
         "autocompletados, confirmaciones y guardados cuando aparezcan. "
         "No inventes credenciales, polizas, clientes ni IDs: crea una entrada especifica en testData con valor "
@@ -167,27 +164,9 @@ def _generation_rules() -> str:
         "Genera fechas de forma determinista en el formato indicado o deja el formato configurable. "
         "Incluye assertions intermedias y finales solo para resultados conocidos. No inventes mensajes de exito. "
         "Si falta el resultado esperado, deja un comentario TODO_ASSERTION y explicalo en ai_notes, sin inventarlo. "
-        "Incluye en ai_notes una lista llamada conceptualmente 'Procesos detectados' con todos los flujos que "
-        "identificaste y aclara si alguno quedo parcial por falta de evidencia visual o textual. "
         "Marca en ai_notes una checklist concreta de selectores, datos y assertions que el QA debe completar. "
         "El codigo debe compilar luego de completar unicamente valores TODO y selectores provisionales. "
         "Devuelve selectors y test_data completos porque la interfaz los presentara como campos editables."
-    )
-
-
-def _video_generation_rules() -> str:
-    return (
-        "Reglas especificas para video: primero analiza los frames como una linea de tiempo y detecta cortes de "
-        "contexto, cambios de pantalla, nuevos codigos de transaccion, nuevos formularios o reinicios de flujo. "
-        "Cada corte importante puede indicar un proceso distinto. Si ves dos procesos en el video, genera dos "
-        "tests; si ves tres, genera tres. No reemplaces un proceso por otro. "
-        "Cuando un texto del video no sea legible, crea variables TODO descriptivas en testData y selectores TODO "
-        "descriptivos en selectors, pero conserva el paso funcional observado. "
-        "Si el usuario no paso descripcion escrita, inferi el flujo desde el video sin inventar datos de negocio: "
-        "usa nombres genericos seguros como TODO_TRANSACTION_CODE_PROCESS_2, TODO_POLICY_NUMBER_PROCESS_2 o "
-        "TODO_CLIENT_PROCESS_2. "
-        "El resultado ideal es un borrador amplio para que QA lo complete, por lo tanto es preferible dejar pasos "
-        "TODO bien ubicados antes que omitir un proceso observado."
     )
 
 
@@ -333,11 +312,7 @@ def _generate_with_vision(payload: Dict[str, str], frames: List[Path]) -> Option
         prompt = (
             "Analiza cronologicamente estos frames de un video de paso a paso e identifica pantallas, campos, "
             "iconos, ventanas, solapas, selecciones y confirmaciones. Usa descripcion, observaciones, codegen "
-            "y selectores aportados para completar lo que no se ve. "
-            + _generation_rules()
-            + " "
-            + _video_generation_rules()
-            + " "
+            "y selectores aportados para completar lo que no se ve. " + _generation_rules() + " "
             "Responde JSON estricto con generated_code, selectors, test_data, ai_notes. "
             "Contexto:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
         )
@@ -350,14 +325,13 @@ def _generate_with_vision(payload: Dict[str, str], frames: List[Path]) -> Option
                     "role": "system",
                     "content": (
                         "Sos un arquitecto senior de automatizacion Playwright con vision. "
-                        "Tu prioridad es detectar todos los procesos funcionales del video antes de escribir codigo. "
-                        "Devuelve solamente JSON valido y no omitas acciones ni procesos observados."
+                        "Devuelve solamente JSON valido y no omitas acciones observadas."
                     ),
                 },
                 {"role": "user", "content": content},
             ],
             temperature=0.15,
-            max_tokens=16000,
+            max_tokens=12000,
             response_format={"type": "json_object"},
         )
         data = _parse_ai_json(resp.choices[0].message.content or "")
@@ -386,8 +360,6 @@ def _audit_prompt(payload: Dict[str, str], generated: Dict[str, Any]) -> List[Di
     system = (
         "Sos el revisor principal de automatizacion Playwright. Audita y CORRIGE el candidato antes de "
         "entregarlo al QA. " + _generation_rules() + " "
-        "Si el material original o el candidato evidencia multiples procesos, conserva o crea un test por proceso; "
-        "no unifiques todo en un solo flujo ni descartes procesos parciales. "
         "Comprueba cobertura de pasos, datos omitidos, acciones incompatibles, botones repetidos, modales, "
         "popups, iframes, fechas, navegacion, assertions inventadas y selectores provisionales. "
         "Devuelve el spec corregido, no solamente recomendaciones. Asigna quality_score de 0 a 100. "
@@ -648,7 +620,6 @@ def _repair_generated(
                     "indicados. No ocultes un defecto cambiando solamente las notas. Si falta informacion real, "
                     "deja una variable TODO y una accion tecnicamente compatible. No inventes assertions. "
                     + _generation_rules()
-                    + " Si hay multiples procesos, conserva un test separado por proceso y no reduzcas la cobertura. "
                     + " Devuelve JSON con generated_code, selectors, test_data, ai_notes, covered_steps, "
                     "manual_actions y warnings."
                 ),
