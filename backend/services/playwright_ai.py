@@ -107,14 +107,20 @@ const testData = {{
 
 test.describe('{spec_title}', () => {{
   test('debe ejecutar el flujo esperado', async ({{ page }}) => {{
-    await page.goto('{navigation_target}');
+    await test.step('Navegar al flujo', async () => {{
+      await page.goto('{navigation_target}');
+    }});
 
-    // TODO: Ajustar estos pasos segun el flujo real detectado.
-    await page.locator(selectors.firstActionButton).click();
-    await page.locator(selectors.firstInput).fill(testData.inputValue);
-    await page.locator(selectors.submitButton).click();
+    await test.step('Ejecutar acciones principales', async () => {{
+      // TODO: Ajustar estos pasos segun el flujo real detectado.
+      await page.locator(selectors.firstActionButton).click();
+      await page.locator(selectors.firstInput).fill(testData.inputValue);
+      await page.locator(selectors.submitButton).click();
+    }});
 
-    await expect(page.locator(selectors.successMessage)).toBeVisible();
+    await test.step('Validar resultado esperado', async () => {{
+      await expect(page.locator(selectors.successMessage)).toBeVisible();
+    }});
   }});
 }});
 """
@@ -139,10 +145,49 @@ test.describe('{spec_title}', () => {{
     }
 
 
+def _architecture_rules() -> str:
+    return (
+        "Aplica estas buenas practicas del equipo Life QA Automation cuando generes scripts: "
+        "usa TypeScript prolijo, nombres camelCase para variables, metodos y locators, PascalCase para clases "
+        "o Page Objects si los propones, y evita strings hardcodeados de dominio dentro del flujo. "
+        "Separa datos en testData, constantes o TEST_CASES; si hay multiples escenarios similares, preferi un "
+        "array TEST_CASES con forEach antes que duplicar toda la logica. "
+        "Usa test.step para que cada accion funcional importante quede visible en el reporte HTML. "
+        "Cuando el usuario aporte o mencione arquitectura existente con fixtures, Page Objects, Builders, enums "
+        "o JSON de datos, respetala: importa desde fixtures, usa Page Objects en vez de page directo, usa builders "
+        "para construir datos y enums para valores de dominio. "
+        "Si esa arquitectura no fue aportada en el contexto tecnico, no inventes rutas reales como ../fixtures, "
+        "../pages o ../constants; genera un spec standalone con TODOs y deja en ai_notes una propuesta de migracion "
+        "a Page Object Model, fixtures, builders y enums. "
+        "No valides valores exactos cuando el resultado pueda variar; usa rangos o TODO_ASSERTION si el resultado "
+        "esperado no esta confirmado. "
+        "La salida debe ayudar a un QA a pasar luego el borrador a la arquitectura final del proyecto sin reescribir "
+        "todo desde cero."
+    )
+
+
+def _architecture_review_notes(payload: Dict[str, str], code: str) -> List[str]:
+    notes: List[str] = []
+    if "test.step(" in code:
+        notes.append("El borrador usa test.step para dejar trazabilidad en el reporte de Playwright.")
+    else:
+        notes.append("Pendiente recomendado por README: envolver acciones funcionales importantes con test.step.")
+    if not _has_technical_context(payload):
+        notes.append(
+            "No se aporto estructura real de fixtures/Page Objects/Builders; se genero standalone y se recomienda "
+            "migrarlo luego a Page Object Model, fixtures, builders/enums y JSON de datos si el repo destino los tiene."
+        )
+    if len(re.findall(r"\btest\(\s*['\"]", code)) >= 3 and "TEST_CASES" not in code:
+        notes.append("Si estos escenarios comparten el mismo flujo, conviene pasarlos a TEST_CASES + forEach.")
+    return notes
+
+
 def _generation_rules() -> str:
     return (
         "El objetivo es generar un scaffold Playwright de alta calidad para que un QA lo termine, no prometer "
         "ejecucion inmediata sin conocer el DOM real. Genera TypeScript con @playwright/test completo y mantenible. "
+        + _architecture_rules()
+        + " "
         "Transforma TODOS los pasos funcionales identificables en acciones trazables con comentarios // Paso N. "
         "Conserva el orden e incluye login, navegacion, modales, dialogs, iframes, pestanas, agendas, tablas, "
         "autocompletados, confirmaciones y guardados cuando aparezcan. "
@@ -822,6 +867,15 @@ def _deterministic_findings(
     ):
         if needle in code:
             warnings.append(message)
+    test_count = len(re.findall(r"\btest\(\s*['\"]", code))
+    if test_count and "test.step(" not in code:
+        warnings.append(
+            "El README del equipo pide usar test.step para trazabilidad en el reporte HTML."
+        )
+    if test_count >= 3 and "TEST_CASES" not in code:
+        manual.append(
+            "Hay varios escenarios similares; evaluar convertirlos a TEST_CASES + forEach para cumplir el patron data-driven."
+        )
     if "page.click('body')" in code or 'page.click("body")' in code:
         critical.append(
             "El codigo hace click sobre body para disparar el autocompletado; debe usar un elemento estable "
@@ -1032,6 +1086,17 @@ def _deterministic_findings(
             )
 
     technical_context = bool(_clean(payload.get("codegen")) or _clean(payload.get("selector_context")))
+    if not technical_context:
+        invented_architecture_imports = re.findall(
+            r"import\s+.*?from\s+['\"]([^'\"]*(?:fixtures|pages|builders|constants|enums)[^'\"]*)['\"]",
+            code,
+            re.I,
+        )
+        for import_path in invented_architecture_imports:
+            critical.append(
+                f"El codigo importa arquitectura no aportada por contexto tecnico: {import_path}. "
+                "Debe quedar standalone o como propuesta en ai_notes."
+            )
     provisional = [
         key for key, value in selectors.items()
         if "data-testid" in value and value not in payload.get("selector_context", "")
@@ -1138,6 +1203,7 @@ def _reviewed_result(
     notes.extend(sanitize_notes)
     notes.extend(direct_wait_notes)
     notes.extend(referenced_notes)
+    notes.extend(_architecture_review_notes(payload, code))
     if extra_note:
         notes.append(extra_note)
     warnings = [str(item) for item in audit_data.get("warnings", [])]
