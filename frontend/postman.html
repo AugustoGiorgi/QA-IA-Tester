@@ -4,52 +4,360 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Postman</title>
-  <link rel="stylesheet" href="/app/dashboard.css?v=20260724-1" />
+  <link rel="stylesheet" href="/app/dashboard.css?v=20260724-2" />
   <style>
-    body.module-page .postman-grid { grid-template-columns: minmax(340px, 0.72fr) minmax(0, 1.28fr); }
-    .postman-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-    .postman-tabs button { width: auto; min-height: 38px; padding: 9px 13px; background: #111c33; border: 1px solid #263958; color: #dbeafe; }
-    .postman-tabs button.active { background: #2563eb; border-color: #60a5fa; color: #fff; }
-    .postman-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
-    .pm-metric { border: 1px solid #253044; border-radius: 8px; padding: 12px; background: #0f172a; }
-    .pm-metric span { display: block; color: #94a3b8; font-size: .78rem; }
-    .pm-metric strong { color: #fff; font-size: 1.5rem; }
-    .pm-list { display: grid; gap: 10px; }
-    .pm-card { border: 1px solid #253044; border-left: 4px solid #2563eb; border-radius: 8px; padding: 12px; background: #0f172a; }
-    .pm-card.warn { border-left-color: #f59e0b; }
-    .pm-card.bad { border-left-color: #ef4444; }
-    .pm-card.ok { border-left-color: #22c55e; }
-    .pm-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-    .pm-card code { color: #bfdbfe; }
-    .pm-editor { display: grid; gap: 10px; margin-top: 10px; }
+    :root {
+      --pm-panel: rgba(17, 24, 39, 0.9);
+      --pm-panel-2: #0f172a;
+      --pm-panel-3: #08111f;
+      --pm-line: #253044;
+      --pm-line-soft: rgba(148, 163, 184, 0.16);
+      --pm-blue: #2563eb;
+      --pm-blue-soft: rgba(37, 99, 235, 0.16);
+      --pm-text: #f8fafc;
+      --pm-muted: #94a3b8;
+      --pm-green: #22c55e;
+      --pm-yellow: #f59e0b;
+      --pm-red: #ef4444;
+    }
+
+    body.module-page {
+      background:
+        radial-gradient(circle at 84% -8%, rgba(37, 99, 235, 0.18), transparent 28rem),
+        linear-gradient(180deg, #0b1530 0%, #07101f 52%);
+    }
+
+    body.module-page .module-container {
+      padding: 26px;
+    }
+
+    body.module-page .page-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: flex-end;
+      margin-bottom: 22px;
+      padding-bottom: 18px;
+    }
+
+    body.module-page .page-head h1 {
+      font-size: clamp(2rem, 3vw, 2.7rem);
+    }
+
+    .pm-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 7px 11px;
+      border: 1px solid rgba(96, 165, 250, 0.32);
+      border-radius: 999px;
+      color: #bfdbfe;
+      background: var(--pm-blue-soft);
+      font-size: .82rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    body.module-page .postman-grid {
+      grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .postman-source-panel,
+    .postman-review-panel {
+      position: relative;
+      overflow: hidden;
+      padding: 22px;
+      border: 1px solid var(--pm-line);
+      border-radius: 10px;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, .94), rgba(8, 17, 31, .96));
+      box-shadow: 0 18px 55px rgba(0, 0, 0, .2);
+    }
+
+    .postman-source-panel {
+      position: sticky;
+      top: 18px;
+    }
+
+    .postman-source-panel h2,
+    .postman-review-panel h2 {
+      margin: 0 0 6px;
+      color: #fff;
+      font-size: 1.15rem;
+    }
+
+    .postman-source-panel label {
+      margin-top: 14px;
+    }
+
+    .postman-source-panel input,
+    .postman-source-panel textarea,
+    .pm-card input,
+    .pm-card textarea,
+    .pm-card select,
+    .pm-table select {
+      border-color: #263958 !important;
+      background: var(--pm-panel-3) !important;
+      color: var(--pm-text) !important;
+      box-shadow: none !important;
+    }
+
+    .postman-source-panel input:focus,
+    .postman-source-panel textarea:focus,
+    .pm-card input:focus,
+    .pm-card textarea:focus,
+    .pm-card select:focus,
+    .pm-table select:focus {
+      border-color: #60a5fa !important;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .18) !important;
+    }
+
+    .postman-dropzone {
+      display: grid !important;
+      min-height: 220px;
+      place-items: center;
+      gap: 12px;
+      padding: 24px !important;
+      border: 1px dashed rgba(96, 165, 250, .46) !important;
+      border-radius: 10px !important;
+      background:
+        radial-gradient(circle at center, rgba(37, 99, 235, .12), transparent 70%),
+        rgba(8, 17, 31, .68) !important;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .postman-dropzone:hover {
+      border-color: rgba(147, 197, 253, .8) !important;
+      background: rgba(37, 99, 235, .12) !important;
+    }
+
+    .postman-dropzone input {
+      display: none;
+    }
+
+    .drop-icon {
+      display: inline-grid;
+      width: 54px;
+      height: 54px;
+      place-items: center;
+      border: 1px solid rgba(147, 197, 253, .36);
+      border-radius: 12px;
+      color: #fff;
+      background: linear-gradient(180deg, #2563eb, #1d4ed8);
+      font-weight: 900;
+      box-shadow: 0 16px 34px rgba(37, 99, 235, .28);
+    }
+
+    .postman-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      padding: 6px;
+      width: fit-content;
+      max-width: 100%;
+      border: 1px solid var(--pm-line);
+      border-radius: 10px;
+      background: rgba(8, 17, 31, .68);
+    }
+
+    .postman-tabs button {
+      width: auto;
+      min-height: 38px;
+      padding: 0 13px !important;
+      border: 1px solid transparent !important;
+      border-radius: 8px !important;
+      color: #cbd5e1 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      font-size: .86rem;
+    }
+
+    .postman-tabs button.active {
+      color: #fff !important;
+      border-color: rgba(147, 197, 253, .44) !important;
+      background: linear-gradient(180deg, #2563eb, #1d4ed8) !important;
+    }
+
+    .postman-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 16px 0 4px;
+    }
+
+    .pm-metric {
+      display: grid;
+      gap: 7px;
+      min-height: 88px;
+      padding: 14px;
+      border: 1px solid var(--pm-line);
+      border-radius: 10px;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(8, 17, 31, .94));
+    }
+
+    .pm-metric span {
+      color: var(--pm-muted);
+      font-size: .78rem;
+      font-weight: 700;
+    }
+
+    .pm-metric strong {
+      color: #fff;
+      font-size: 1.65rem;
+      line-height: 1;
+    }
+
+    .pm-list {
+      display: grid;
+      gap: 12px;
+      min-height: 360px;
+      padding: 4px 0 0;
+    }
+
+    .pm-empty {
+      display: grid;
+      min-height: 250px;
+      place-items: center;
+      border: 1px solid var(--pm-line-soft);
+      border-radius: 10px;
+      background: rgba(8, 17, 31, .42);
+      color: var(--pm-muted);
+      text-align: center;
+    }
+
+    .pm-card {
+      border: 1px solid var(--pm-line);
+      border-left: 4px solid #60a5fa;
+      border-radius: 10px;
+      padding: 15px;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(8, 17, 31, .94));
+    }
+
+    .pm-card.warn { border-left-color: var(--pm-yellow); }
+    .pm-card.bad { border-left-color: var(--pm-red); }
+    .pm-card.ok { border-left-color: var(--pm-green); }
+
+    .pm-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: flex-start;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--pm-line-soft);
+    }
+
+    .pm-card strong {
+      color: #fff;
+    }
+
+    .pm-card code {
+      display: inline-flex;
+      padding: 3px 7px;
+      border: 1px solid rgba(96, 165, 250, .3);
+      border-radius: 999px;
+      color: #bfdbfe;
+      background: rgba(37, 99, 235, .12);
+      font-weight: 800;
+    }
+
+    .pm-editor {
+      display: grid;
+      gap: 11px;
+      margin-top: 12px;
+    }
+
     .pm-editor.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .pm-editor.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .pm-table { width: 100%; border-collapse: collapse; }
-    .pm-table th, .pm-table td { padding: 10px; border-bottom: 1px solid #253044; text-align: left; vertical-align: top; }
-    .pm-table th { color: #dbeafe; background: #0b1a30; }
-    .pm-table select, .pm-table input { min-width: 160px; }
-    .pm-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-    .pm-downloads a { display: inline-flex; width: auto; min-height: 40px; align-items: center; justify-content: center; padding: 0 14px; border: 1px solid rgba(96,165,250,.5); border-radius: 8px; background: #2563eb; color: #fff; font-weight: 800; text-decoration: none; }
+
+    .pm-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--pm-line);
+      border-radius: 10px;
+    }
+
+    .pm-table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: collapse;
+      background: rgba(15, 23, 42, .82);
+    }
+
+    .pm-table th,
+    .pm-table td {
+      padding: 12px;
+      border-bottom: 1px solid var(--pm-line-soft);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .pm-table th {
+      color: #dbeafe;
+      background: #0b1a30;
+      font-size: .8rem;
+    }
+
+    .pm-table select {
+      min-width: 180px;
+    }
+
+    .pm-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .pm-downloads button[data-download] {
+      width: auto;
+      min-height: 40px;
+      padding: 0 14px !important;
+      border: 1px solid rgba(96, 165, 250, .5) !important;
+      border-radius: 8px !important;
+      color: #fff !important;
+      background: linear-gradient(180deg, #2563eb, #1d4ed8) !important;
+      font-weight: 800;
+    }
+
     .hidden { display: none !important; }
+
     @media (max-width: 980px) {
-      body.module-page .postman-grid, .postman-summary, .pm-editor.two, .pm-editor.three { grid-template-columns: 1fr; }
+      body.module-page .postman-grid,
+      .postman-summary,
+      .pm-editor.two,
+      .pm-editor.three {
+        grid-template-columns: 1fr;
+      }
+
+      .postman-source-panel {
+        position: static;
+      }
     }
   </style>
 </head>
 <body class="module-page">
   <main class="module-container">
     <header class="page-head">
-      <h1>Postman</h1>
-      <p class="small muted">Genera colecciones Postman agnosticas desde documentacion, casos, cURL, OpenAPI o colecciones existentes.</p>
+      <div>
+        <h1>Postman</h1>
+        <p class="small muted">Genera colecciones agnosticas desde documentacion, casos, cURL, OpenAPI o colecciones existentes.</p>
+      </div>
+      <span class="pm-badge">Modulo QA</span>
     </header>
 
     <section class="module-grid postman-grid">
-      <form id="postmanForm" class="module-panel module-form">
+      <form id="postmanForm" class="postman-source-panel module-form">
         <h2>Fuentes de entrada</h2>
+        <p class="small muted">Combina archivos y texto. El sistema detecta endpoints, casos, variables y advertencias.</p>
         <label>Nombre del proyecto
           <input id="projectName" type="text" placeholder="Proyecto API" />
         </label>
-        <label class="dropzone" id="dropzone">
+        <label class="postman-dropzone" id="dropzone">
           <span class="drop-icon">API</span>
           <strong>Arrastra archivos o selecciona</strong>
           <span id="fileSummary" class="small muted">JSON, YAML, MD, TXT, DOCX, PDF, cURL o Postman</span>
@@ -62,7 +370,7 @@
         <div id="postmanStatus" class="field-error"></div>
       </form>
 
-      <section class="module-panel">
+      <section class="postman-review-panel">
         <div class="users-toolbar">
           <div>
             <h2>Revision humana</h2>

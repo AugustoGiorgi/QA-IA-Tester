@@ -819,11 +819,16 @@ def _public(doc: Dict[str, Any]) -> Dict[str, Any]:
     return public
 
 
+def _require_qa(user: Dict[str, Any]) -> None:
+    if user.get("role") != "qa":
+        raise HTTPException(status_code=403, detail="Postman disponible solo para QA.")
+
+
 async def _get_draft(draft_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     doc = await _db()[COLLECTION].find_one({"_id": _oid(draft_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Draft no encontrado.")
-    if user.get("role") != "lider" and doc.get("created_by") != user.get("username"):
+    if doc.get("created_by") != user.get("username"):
         raise HTTPException(status_code=403, detail="No podes acceder a este draft.")
     return doc
 
@@ -835,8 +840,7 @@ async def analyze_postman_sources(
     project_name: str = Form(default=""),
     user: Dict[str, Any] = Depends(current_user),
 ):
-    if user.get("role") not in {"qa", "lider"}:
-        raise HTTPException(status_code=403, detail="Postman disponible para QA y Lider.")
+    _require_qa(user)
     sources = [await _read_upload(file) for file in (files or [])]
     if not sources and not manual_text.strip():
         raise HTTPException(status_code=400, detail="Carga al menos un archivo o texto.")
@@ -870,20 +874,21 @@ async def analyze_postman_sources(
 
 @router.get("/drafts")
 async def list_drafts(user: Dict[str, Any] = Depends(current_user)):
-    if user.get("role") not in {"qa", "lider"}:
-        raise HTTPException(status_code=403, detail="Postman disponible para QA y Lider.")
-    query = {} if user.get("role") == "lider" else {"created_by": user["username"]}
+    _require_qa(user)
+    query = {"created_by": user["username"]}
     docs = await _db()[COLLECTION].find(query).sort("created_at", DESCENDING).to_list(100)
     return {"drafts": [_public(doc) for doc in docs]}
 
 
 @router.get("/drafts/{draft_id}")
 async def get_draft(draft_id: str, user: Dict[str, Any] = Depends(current_user)):
+    _require_qa(user)
     return {"draft": _public(await _get_draft(draft_id, user))}
 
 
 @router.put("/drafts/{draft_id}")
 async def update_draft(draft_id: str, payload: DraftUpdate, user: Dict[str, Any] = Depends(current_user)):
+    _require_qa(user)
     doc = await _get_draft(draft_id, user)
     model = dict(doc.get("model") or {})
     update_data = payload.model_dump(exclude_none=True)
@@ -891,6 +896,19 @@ async def update_draft(draft_id: str, payload: DraftUpdate, user: Dict[str, Any]
     model["validation"] = validate_model(model)
     await _db()[COLLECTION].update_one({"_id": doc["_id"]}, {"$set": {"model": model, "updated_at": _now()}})
     doc["model"] = model
+    await record_activity(
+        user,
+        "Revision Postman",
+        "postman",
+        f"Actualizo revision de Postman: {doc.get('project_name', 'Proyecto API')}",
+        {
+            "draft_id": draft_id,
+            "project_name": doc.get("project_name"),
+            "endpoints": len(model.get("endpoints", [])),
+            "casos": len(model.get("test_cases", [])),
+            "asociaciones": len([item for item in model.get("associations", []) if item.get("endpoint_id")]),
+        },
+    )
     return {"draft": _public(doc)}
 
 
@@ -908,8 +926,23 @@ def _file_payload(kind: str, model: Dict[str, Any]) -> Tuple[str, bytes, str]:
 
 @router.get("/drafts/{draft_id}/download/{kind}")
 async def download_generated(kind: str, draft_id: str, user: Dict[str, Any] = Depends(current_user)):
+    _require_qa(user)
     doc = await _get_draft(draft_id, user)
     model = doc.get("model") or {}
+    label = "ZIP completo" if kind == "zip" else kind
+    await record_activity(
+        user,
+        "Descarga Postman",
+        "postman",
+        f"Descargo {label} de Postman: {doc.get('project_name', 'Proyecto API')}",
+        {
+            "draft_id": draft_id,
+            "project_name": doc.get("project_name"),
+            "tipo_descarga": kind,
+            "endpoints": len(model.get("endpoints", [])),
+            "casos": len(model.get("test_cases", [])),
+        },
+    )
     if kind == "zip":
         output = BytesIO()
         with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -930,7 +963,21 @@ async def download_generated(kind: str, draft_id: str, user: Dict[str, Any] = De
 
 @router.post("/drafts/{draft_id}/validate")
 async def validate_draft(draft_id: str, user: Dict[str, Any] = Depends(current_user)):
+    _require_qa(user)
     doc = await _get_draft(draft_id, user)
     validation = validate_model(doc.get("model") or {})
     await _db()[COLLECTION].update_one({"_id": doc["_id"]}, {"$set": {"model.validation": validation, "updated_at": _now()}})
+    await record_activity(
+        user,
+        "Validacion Postman",
+        "postman",
+        f"Valido coleccion Postman: {doc.get('project_name', 'Proyecto API')}",
+        {
+            "draft_id": draft_id,
+            "project_name": doc.get("project_name"),
+            "valid": validation.get("valid"),
+            "errores": len(validation.get("errors", [])),
+            "advertencias": len(validation.get("warnings", [])),
+        },
+    )
     return {"validation": validation}

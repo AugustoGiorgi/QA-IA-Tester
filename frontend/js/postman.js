@@ -1,6 +1,6 @@
 import { authFetch, requireAuth } from './auth.js';
 
-requireAuth(['qa', 'lider']);
+requireAuth(['qa']);
 
 const $ = id => document.getElementById(id);
 let currentDraft = null;
@@ -41,7 +41,7 @@ function renderTab(tab) {
   const content = $('tabContent');
   const m = model();
   if (!currentDraft) {
-    content.innerHTML = '<p class="small muted">Carga fuentes para iniciar el analisis.</p>';
+    content.innerHTML = '<div class="pm-empty"><p>Carga fuentes para iniciar el analisis.</p></div>';
     return;
   }
   if (tab === 'endpoints') content.innerHTML = renderEndpoints(m.endpoints || []);
@@ -74,7 +74,7 @@ function renderEndpoints(endpoints) {
       </div>
       <label>Descripcion<textarea data-field="description" rows="2">${escapeHtml(endpoint.description || '')}</textarea></label>
     </article>
-  `).join('') || '<p class="small muted">Sin endpoints detectados.</p>';
+  `).join('') || '<div class="pm-empty"><p>Sin endpoints detectados.</p></div>';
 }
 
 function renderCases(cases) {
@@ -84,7 +84,7 @@ function renderCases(cases) {
       <p class="small muted">${escapeHtml(testCase.test_type || 'funcional')} · ${escapeHtml(testCase.source_refs?.[0]?.source || '')}</p>
       <p>${escapeHtml((testCase.description || '').slice(0, 480))}</p>
     </article>
-  `).join('') || '<p class="small muted">Sin casos detectados.</p>';
+  `).join('') || '<div class="pm-empty"><p>Sin casos detectados.</p></div>';
 }
 
 function renderTrace(associations, cases, endpoints) {
@@ -93,23 +93,25 @@ function renderTrace(associations, cases, endpoints) {
   ))).join('');
   const caseById = Object.fromEntries(cases.map(item => [item.id, item]));
   return `
-    <table class="pm-table">
-      <thead><tr><th>Caso</th><th>Request asociado</th><th>Confianza</th><th>Evidencia</th></tr></thead>
-      <tbody>
-        ${associations.map((assoc, index) => `
-          <tr data-association-index="${index}">
-            <td>${escapeHtml(caseById[assoc.case_id]?.name || assoc.case_id)}</td>
-            <td><select data-field="endpoint_id">${endpointOptions}</select></td>
-            <td>
-              <select data-field="confidence">
-                ${['Alta','Media','Baja','Sin coincidencia'].map(v => `<option value="${v}" ${v === assoc.confidence ? 'selected' : ''}>${v}</option>`).join('')}
-              </select>
-            </td>
-            <td>${escapeHtml((assoc.evidence || []).join('; ') || assoc.explanation || '')}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
+    <div class="pm-table-wrap">
+      <table class="pm-table">
+        <thead><tr><th>Caso</th><th>Request asociado</th><th>Confianza</th><th>Evidencia</th></tr></thead>
+        <tbody>
+          ${associations.map((assoc, index) => `
+            <tr data-association-index="${index}">
+              <td>${escapeHtml(caseById[assoc.case_id]?.name || assoc.case_id)}</td>
+              <td><select data-field="endpoint_id">${endpointOptions}</select></td>
+              <td>
+                <select data-field="confidence">
+                  ${['Alta','Media','Baja','Sin coincidencia'].map(v => `<option value="${v}" ${v === assoc.confidence ? 'selected' : ''}>${v}</option>`).join('')}
+                </select>
+              </td>
+              <td>${escapeHtml((assoc.evidence || []).join('; ') || assoc.explanation || '')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -124,7 +126,7 @@ function renderVariables(variables) {
       <label>Valor<input data-field="value" value="${escapeHtml(variable.value || '')}" placeholder="${variable.sensitive ? 'Secreto omitido por seguridad' : ''}" /></label>
       <p class="small muted">${escapeHtml(variable.reason || '')} ${variable.sensitive ? '· Posible sensible' : ''}</p>
     </article>
-  `).join('') || '<p class="small muted">Sin variables detectadas.</p>';
+  `).join('') || '<div class="pm-empty"><p>Sin variables detectadas.</p></div>';
 }
 
 function renderWarnings(m) {
@@ -141,7 +143,7 @@ function renderWarnings(m) {
       <p>${escapeHtml(item.text || '')}</p>
       <p class="small muted">${escapeHtml(item.source || '')}</p>
     </article>
-  `).join('') || '<p class="small muted">Sin advertencias activas.</p>';
+  `).join('') || '<div class="pm-empty"><p>Sin advertencias activas.</p></div>';
 }
 
 function renderDownloads(draft) {
@@ -155,11 +157,11 @@ function renderDownloads(draft) {
         <button id="validateDraft" type="button" class="btn-secondary">Validar</button>
       </div>
       <div class="pm-actions">
-        <a href="${base}/collection" target="_blank">Collection</a>
-        <a href="${base}/environment" target="_blank">Environment</a>
-        <a href="${base}/readme" target="_blank">README</a>
-        <a href="${base}/traceability" target="_blank">Trazabilidad</a>
-        <a href="${base}/zip" target="_blank">ZIP completo</a>
+        <button type="button" data-download="${base}/collection" data-filename="collection.json">Collection</button>
+        <button type="button" data-download="${base}/environment" data-filename="environment.json">Environment</button>
+        <button type="button" data-download="${base}/readme" data-filename="README.md">README</button>
+        <button type="button" data-download="${base}/traceability" data-filename="traceability.md">Trazabilidad</button>
+        <button type="button" data-download="${base}/zip" data-filename="qa_postman_package.zip">ZIP completo</button>
       </div>
     </article>
   `;
@@ -200,6 +202,28 @@ function wireTab(tab) {
   }
   $('saveDraft')?.addEventListener('click', saveDraft);
   $('validateDraft')?.addEventListener('click', validateDraft);
+  document.querySelectorAll('[data-download]').forEach(button => {
+    button.addEventListener('click', () => downloadFile(button.dataset.download, button.dataset.filename));
+  });
+}
+
+async function downloadFile(url, filename) {
+  setStatus('Preparando descarga...');
+  const res = await authFetch(url);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    setStatus(data.detail || 'No se pudo descargar.');
+    return;
+  }
+  const blob = await res.blob();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename || 'postman_file';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+  setStatus('Descarga generada.', true);
 }
 
 async function saveDraft() {
@@ -281,7 +305,7 @@ async function loadDrafts() {
       <p class="small muted">${escapeHtml(draft.created_by)} · ${(draft.model?.endpoints || []).length} endpoints · ${(draft.model?.test_cases || []).length} casos</p>
       <button type="button" class="btn-secondary">Abrir</button>
     </article>
-  `).join('') || '<p class="small muted">Sin drafts guardados.</p>';
+  `).join('') || '<div class="pm-empty"><p>Sin drafts guardados.</p></div>';
   $('summary').innerHTML = '';
   document.querySelectorAll('[data-draft-id] button').forEach(btn => btn.addEventListener('click', async () => {
     const id = btn.closest('[data-draft-id]').dataset.draftId;
