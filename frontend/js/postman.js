@@ -322,5 +322,11 @@ $('refreshDrafts').addEventListener('click', loadDrafts);
 document.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => renderTab(btn.dataset.tab)));
 $('sourceFiles').addEventListener('change', () => {
   const files = [...$('sourceFiles').files].map(file => file.name);
-  $('fileSummary').textContent = files.length ? files.join(', ') : 'JSON, YAML, MD, TXT, DOCX, PDF, cURL o Postman';
+  if (!files.length) {
+    $('fileSummary').textContent = 'JSON, YAML, MD, TXT, DOCX, PDF, cURL, HTTP o Postman';
+    return;
+  }
+  const visibleFiles = files.slice(0, 4).map(name => `<span class="postman-file-pill">${escapeHtml(name)}</span>`);
+  const remaining = files.length - visibleFiles.length;
+  $('fileSummary').innerHTML = `${visibleFiles.join('')}${remaining > 0 ? `<span class="postman-file-pill">+${remaining} archivos</span>` : ''}`;
 });

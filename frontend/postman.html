@@ -36,7 +36,7 @@
       justify-content: space-between;
       gap: 18px;
       align-items: flex-end;
-      margin-bottom: 22px;
+      margin-bottom: 18px;
       padding-bottom: 18px;
     }
 
@@ -44,22 +44,8 @@
       font-size: clamp(2rem, 3vw, 2.7rem);
     }
 
-    .pm-badge {
-      display: inline-flex;
-      align-items: center;
-      min-height: 34px;
-      padding: 7px 11px;
-      border: 1px solid rgba(96, 165, 250, 0.32);
-      border-radius: 999px;
-      color: #bfdbfe;
-      background: var(--pm-blue-soft);
-      font-size: .82rem;
-      font-weight: 800;
-      white-space: nowrap;
-    }
-
     body.module-page .postman-grid {
-      grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
+      grid-template-columns: minmax(370px, 460px) minmax(0, 1fr);
       gap: 20px;
       align-items: start;
     }
@@ -68,7 +54,7 @@
     .postman-review-panel {
       position: relative;
       overflow: hidden;
-      padding: 22px;
+      padding: 24px;
       border: 1px solid var(--pm-line);
       border-radius: 10px;
       background:
@@ -79,6 +65,7 @@
     .postman-source-panel {
       position: sticky;
       top: 18px;
+      border-color: rgba(96, 165, 250, .32);
     }
 
     .postman-source-panel h2,
@@ -86,6 +73,26 @@
       margin: 0 0 6px;
       color: #fff;
       font-size: 1.15rem;
+    }
+
+    .source-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .source-step {
+      display: inline-grid;
+      min-width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 1px solid rgba(96, 165, 250, .42);
+      border-radius: 999px;
+      color: #bfdbfe;
+      background: rgba(37, 99, 235, .16);
+      font-weight: 900;
     }
 
     .postman-source-panel label {
@@ -116,22 +123,25 @@
 
     .postman-dropzone {
       display: grid !important;
-      min-height: 220px;
+      min-height: 285px;
       place-items: center;
-      gap: 12px;
-      padding: 24px !important;
-      border: 1px dashed rgba(96, 165, 250, .46) !important;
+      gap: 14px;
+      margin-top: 0 !important;
+      padding: 30px 26px !important;
+      border: 2px dashed rgba(96, 165, 250, .58) !important;
       border-radius: 10px !important;
       background:
-        radial-gradient(circle at center, rgba(37, 99, 235, .12), transparent 70%),
+        radial-gradient(circle at top, rgba(37, 99, 235, .2), transparent 62%),
         rgba(8, 17, 31, .68) !important;
       text-align: center;
       cursor: pointer;
+      transition: border-color .18s ease, transform .18s ease, background .18s ease;
     }
 
     .postman-dropzone:hover {
       border-color: rgba(147, 197, 253, .8) !important;
       background: rgba(37, 99, 235, .12) !important;
+      transform: translateY(-1px);
     }
 
     .postman-dropzone input {
@@ -140,15 +150,67 @@
 
     .drop-icon {
       display: inline-grid;
-      width: 54px;
-      height: 54px;
+      width: 64px;
+      height: 64px;
       place-items: center;
       border: 1px solid rgba(147, 197, 253, .36);
-      border-radius: 12px;
+      border-radius: 16px;
       color: #fff;
       background: linear-gradient(180deg, #2563eb, #1d4ed8);
       font-weight: 900;
       box-shadow: 0 16px 34px rgba(37, 99, 235, .28);
+    }
+
+    .upload-title {
+      display: grid;
+      gap: 6px;
+      color: #fff;
+      font-size: 1.05rem;
+      line-height: 1.25;
+    }
+
+    .upload-title small {
+      color: #93c5fd;
+      font-size: .86rem;
+      font-weight: 800;
+    }
+
+    .postman-file-list {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      max-width: 100%;
+      color: var(--pm-muted);
+      font-size: .82rem;
+      line-height: 1.35;
+    }
+
+    .postman-file-pill {
+      display: inline-flex;
+      max-width: 100%;
+      align-items: center;
+      padding: 6px 9px;
+      border: 1px solid rgba(96, 165, 250, .3);
+      border-radius: 999px;
+      color: #dbeafe;
+      background: rgba(37, 99, 235, .13);
+      font-size: .78rem;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .postman-input-stack {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .postman-source-panel button[type="submit"] {
+      width: 100%;
+      min-height: 46px;
+      margin-top: 16px;
     }
 
     .postman-tabs {
@@ -228,6 +290,13 @@
       background: rgba(8, 17, 31, .42);
       color: var(--pm-muted);
       text-align: center;
+    }
+
+    .review-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
     }
 
     .pm-card {
@@ -345,37 +414,42 @@
     <header class="page-head">
       <div>
         <h1>Postman</h1>
-        <p class="small muted">Genera colecciones agnosticas desde documentacion, casos, cURL, OpenAPI o colecciones existentes.</p>
       </div>
-      <span class="pm-badge">Modulo QA</span>
     </header>
 
     <section class="module-grid postman-grid">
       <form id="postmanForm" class="postman-source-panel module-form">
-        <h2>Fuentes de entrada</h2>
-        <p class="small muted">Combina archivos y texto. El sistema detecta endpoints, casos, variables y advertencias.</p>
-        <label>Nombre del proyecto
-          <input id="projectName" type="text" placeholder="Proyecto API" />
-        </label>
+        <div class="source-head">
+          <h2>Cargar fuentes</h2>
+          <span class="source-step">1</span>
+        </div>
         <label class="postman-dropzone" id="dropzone">
           <span class="drop-icon">API</span>
-          <strong>Arrastra archivos o selecciona</strong>
-          <span id="fileSummary" class="small muted">JSON, YAML, MD, TXT, DOCX, PDF, cURL o Postman</span>
+          <span class="upload-title">
+            <strong>Arrastra archivos aca</strong>
+            <small>o toca para seleccionarlos</small>
+          </span>
+          <span id="fileSummary" class="postman-file-list">
+            JSON, YAML, MD, TXT, DOCX, PDF, cURL, HTTP o Postman
+          </span>
           <input id="sourceFiles" type="file" multiple accept=".json,.yaml,.yml,.md,.txt,.docx,.pdf,.xml,.curl,.http" />
         </label>
-        <label>Texto pegado
-          <textarea id="manualText" rows="10" placeholder="Pega endpoints, cURL, casos de prueba, variables, ejemplos de request/response o documentacion tecnica"></textarea>
-        </label>
+
+        <div class="postman-input-stack">
+          <label>Nombre del proyecto
+            <input id="projectName" type="text" placeholder="Proyecto API" />
+          </label>
+          <label>Texto o cURL
+            <textarea id="manualText" rows="8" placeholder="Pega endpoints, cURL, casos, variables o ejemplos request/response"></textarea>
+          </label>
+        </div>
         <button id="analyzeBtn" type="submit">Analizar fuentes</button>
         <div id="postmanStatus" class="field-error"></div>
       </form>
 
       <section class="postman-review-panel">
-        <div class="users-toolbar">
-          <div>
-            <h2>Revision humana</h2>
-            <p class="small muted">Edita asociaciones, variables y requests antes de descargar.</p>
-          </div>
+        <div class="review-head">
+          <h2>Revision</h2>
           <button id="refreshDrafts" type="button" class="btn-secondary">Biblioteca</button>
         </div>
         <div id="summary" class="postman-summary"></div>
@@ -388,12 +462,12 @@
           <button type="button" data-tab="downloads">Descargas</button>
         </nav>
         <div id="tabContent" class="pm-list">
-          <p class="small muted">Carga fuentes para iniciar el analisis.</p>
+          <div class="pm-empty"><p>Sin analisis todavia.</p></div>
         </div>
       </section>
     </section>
   </main>
 
-  <script type="module" src="/app/js/postman.js?v=20260724-1"></script>
+  <script type="module" src="/app/js/postman.js?v=20260724-3"></script>
 </body>
 </html>
