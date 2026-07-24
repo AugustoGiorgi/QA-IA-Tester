@@ -65,6 +65,7 @@ export function trackActivity(payload = {}) {
 function inferModule(value = '') {
   const text = String(value).toLowerCase();
   if (text.includes('playwright')) return 'playwright';
+  if (text.includes('postman')) return 'postman';
   if (text.includes('quality-records') || text.includes('registro')) return 'registro-ia';
   if (text.includes('internal-tasks') || text.includes('tareas')) return 'tareas';
   if (text.includes('auth/users') || text.includes('usuarios')) return 'usuarios';

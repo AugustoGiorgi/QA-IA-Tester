@@ -36,6 +36,7 @@ from services.reporting import build_markdown_report
 # Playwright desde Excel (service)
 from services.playwright_xlsx import router as playwright_xlsx_router
 from services.playwright_ai import router as playwright_ai_router
+from services.postman_generator import router as postman_generator_router
 
 # ⬇️ Chat de recomendaciones (calidad)
 from services.routes_quality_chat import router as reco_chat_router
@@ -444,3 +445,4 @@ def ping_playwright_v2():
 
 app.include_router(playwright_xlsx_router, prefix="/api/playwright", dependencies=[Depends(require_roles("qa"))])
 app.include_router(playwright_ai_router, prefix="/api/playwright")
+app.include_router(postman_generator_router)
