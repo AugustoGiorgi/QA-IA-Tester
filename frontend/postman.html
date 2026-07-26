@@ -96,6 +96,8 @@
     }
 
     .postman-source-panel label {
+      display: grid;
+      gap: 8px;
       margin-top: 14px;
     }
 
@@ -110,6 +112,8 @@
       background: rgba(8, 17, 31, .72) !important;
       color: var(--pm-text) !important;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, .02) !important;
+      box-sizing: border-box !important;
+      width: 100% !important;
     }
 
     .postman-source-panel input:focus,
@@ -206,6 +210,9 @@
       grid-template-columns: 1fr;
       gap: 14px;
       margin-top: 16px;
+      width: min(100%, 408px);
+      margin-left: auto;
+      margin-right: auto;
     }
 
     .postman-source-panel button[type="submit"] {
