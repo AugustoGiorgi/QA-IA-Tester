@@ -20,7 +20,7 @@ const tools = [
   { id: 'calidad', roles: ['funcional', 'lider'], label: 'Calidad Funcional', href: '/app/calidad.html' },
   { id: 'casos', roles: ['qa'], label: 'Casos de Prueba', href: '/app/casos.html' },
   { id: 'playwright', roles: ['qa'], label: 'Playwright', href: '/app/playwright_xlsx.html?v=20260602-1' },
-  { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20260726-2' },
+  { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20260726-3' },
   { id: 'funcional', roles: ['funcional'], label: 'Doc. Funcional', href: '/app/chat-funcional.html' },
   { id: 'importacion', roles: ['lider'], label: 'Importacion', href: '/app/importacion.html' },
   { id: 'usuarios', roles: ['lider'], label: 'Usuarios', href: '/app/usuarios.html?v=20260519-2' },
