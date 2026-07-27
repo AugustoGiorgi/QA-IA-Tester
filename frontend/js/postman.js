@@ -41,30 +41,42 @@ function renderLoading() {
   `;
 }
 
-function warningItems(model) {
-  return [
-    ...(model.warnings || []).map(item => item.message || ''),
-    ...(model.conflicts || []).map(item => item.message || ''),
-    ...((model.validation || {}).warnings || []),
-    ...((model.validation || {}).errors || []),
-  ].filter(Boolean);
+function renderCaseAdjustments(addedCases, extraCases) {
+  if (!addedCases.length && !extraCases.length) {
+    return '<div class="pm-case-box ok"><strong>Excel de casos OK</strong><span>No se detectaron casos faltantes ni sobrantes.</span></div>';
+  }
+  return `
+    <div class="pm-case-grid">
+      <div class="pm-case-box">
+        <strong>Casos agregados (${addedCases.length})</strong>
+        ${addedCases.slice(0, 8).map(item => `<span>${escapeHtml(item.case || '')}</span>`).join('') || '<span>No se agregaron casos.</span>'}
+      </div>
+      <div class="pm-case-box warn">
+        <strong>Casos sobrantes (${extraCases.length})</strong>
+        ${extraCases.slice(0, 8).map(item => `<span>${escapeHtml(item.case || '')}</span>`).join('') || '<span>No se detectaron sobrantes.</span>'}
+      </div>
+    </div>
+  `;
 }
 
 function renderResult(draft) {
   const model = draft.model || {};
   const endpointCount = (model.endpoints || []).length;
   const caseCount = (model.test_cases || []).length;
-  const warnings = warningItems(model);
   const caseSource = model.cases_source?.name || '';
+  const addedCases = model.case_adjustments?.added || [];
+  const extraCases = model.case_adjustments?.extra || [];
+  const adjustmentCount = addedCases.length + extraCases.length;
   $('resultPanel').className = '';
   $('resultPanel').innerHTML = `
     <h2>Collection generada</h2>
-    <p class="pm-help">${escapeHtml(draft.project_name || 'Proyecto API')}${caseSource ? ` · Excel analizado: ${escapeHtml(caseSource)}` : ''}</p>
+    <p class="pm-help">${escapeHtml(draft.project_name || 'Proyecto API')}${caseSource ? ` - Excel analizado: ${escapeHtml(caseSource)}` : ''}</p>
     <div class="pm-summary">
       <div class="pm-metric"><span>Endpoints</span><strong>${endpointCount}</strong></div>
       <div class="pm-metric"><span>Casos</span><strong>${caseCount}</strong></div>
-      <div class="pm-metric"><span>Alertas</span><strong>${warnings.length}</strong></div>
+      <div class="pm-metric"><span>Ajustes</span><strong>${caseSource ? adjustmentCount : '-'}</strong></div>
     </div>
+    ${caseSource ? renderCaseAdjustments(addedCases, extraCases) : ''}
     <div class="pm-actions">
       <button class="pm-primary" type="button" data-download="collection">Descargar collection</button>
     </div>
@@ -77,11 +89,6 @@ function renderResult(draft) {
         <li>Completar variables vacias antes de ejecutar.</li>
       </ol>
     </section>
-    ${warnings.length ? `
-      <div class="pm-warning-list">
-        ${warnings.slice(0, 8).map(item => `<div class="pm-warning">${escapeHtml(item)}</div>`).join('')}
-      </div>
-    ` : ''}
   `;
   document.querySelectorAll('[data-download]').forEach(button => {
     button.addEventListener('click', () => downloadFile(button.dataset.download));

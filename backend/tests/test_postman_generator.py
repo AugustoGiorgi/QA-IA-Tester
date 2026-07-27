@@ -97,6 +97,30 @@ Resultado esperado: Rechazo controlado.
         self.assertEqual(source["extension"], ".xlsx")
         self.assertIn("Crear siniestro", source["text"])
 
+    def test_endpoint_without_excel_gets_senior_qa_cases(self):
+        openapi = """
+openapi: 3.0.0
+paths:
+  /polizas/{id}:
+    post:
+      summary: Actualizar poliza
+      requestBody:
+        content:
+          application/json:
+            example:
+              estado: activa
+      responses:
+        "200":
+          description: OK
+"""
+        model = build_intermediate_model(
+            [{"name": "polizas.yaml", "extension": ".yaml", "text": openapi, "size": len(openapi), "warning": ""}]
+        )
+        generated = [case for case in model["test_cases"] if case.get("generated")]
+        self.assertGreaterEqual(len(generated), 4)
+        self.assertTrue(any("camino feliz" in case["name"] for case in generated))
+        self.assertTrue(any("sin autorizacion" in case["name"] for case in generated))
+
 
 if __name__ == "__main__":
     unittest.main()

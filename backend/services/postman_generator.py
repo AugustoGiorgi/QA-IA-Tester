@@ -561,6 +561,127 @@ def _associate(cases: List[Dict[str, Any]], endpoints: List[Dict[str, Any]]) -> 
     return associations
 
 
+def _case_blob(case: Dict[str, Any]) -> str:
+    return " ".join([
+        str(case.get("name", "")),
+        str(case.get("description", "")),
+        str(case.get("expected_result", "")),
+        " ".join(str(step) for step in case.get("steps", [])),
+    ]).lower()
+
+
+def _generated_case(endpoint: Dict[str, Any], suffix: str, title: str, description: str, expected: str, case_number: int) -> Dict[str, Any]:
+    method = endpoint.get("method", "GET")
+    path = endpoint.get("path", endpoint.get("name", "endpoint"))
+    return {
+        "id": f"case_auto_{endpoint.get('id', case_number)}_{suffix}",
+        "case_id": f"AUTO-{case_number:03d}",
+        "name": f"{method} {path} - {title}",
+        "objective": title,
+        "description": description,
+        "preconditions": [],
+        "input_data": {},
+        "steps": [
+            f"Preparar request {method} {path}.",
+            "Completar variables obligatorias con datos validos.",
+            "Ejecutar request desde Postman.",
+            "Validar status, estructura y mensaje de respuesta.",
+        ],
+        "expected_result": expected,
+        "postconditions": [],
+        "priority": "Media",
+        "test_type": "funcional",
+        "dependencies": [],
+        "created_or_modified_data": [],
+        "related_request_ids": [endpoint.get("id", "")],
+        "source_refs": [_source_ref("generador_qa_senior", "generated_case", f"{method} {path}")],
+        "generated": True,
+    }
+
+
+def _complete_qa_case_coverage(
+    endpoints: List[Dict[str, Any]],
+    test_cases: List[Dict[str, Any]],
+    associations: List[Dict[str, Any]],
+    compare_excel: bool = False,
+) -> Tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, str]]]]:
+    case_by_id = {case["id"]: case for case in test_cases}
+    cases_by_endpoint: Dict[str, List[Dict[str, Any]]] = {}
+    for assoc in associations:
+        if assoc.get("endpoint_id") and assoc.get("case_id") in case_by_id:
+            cases_by_endpoint.setdefault(assoc["endpoint_id"], []).append(case_by_id[assoc["case_id"]])
+
+    generated: List[Dict[str, Any]] = []
+    adjustments = {"added": [], "extra": []}
+    case_number = len(test_cases) + 1
+
+    for endpoint in endpoints:
+        endpoint_cases = cases_by_endpoint.get(endpoint.get("id", ""), [])
+        blobs = " ".join(_case_blob(case) for case in endpoint_cases)
+        method = endpoint.get("method", "GET")
+        path = endpoint.get("path", endpoint.get("name", "endpoint"))
+
+        needs = [
+            (
+                "ok",
+                "camino feliz",
+                f"Validar que el endpoint {method} {path} responda correctamente con datos validos.",
+                "Respuesta exitosa y payload coherente con la documentacion.",
+                not any(word in blobs for word in ("ok", "exito", "exitoso", "valido", "happy")),
+            )
+        ]
+        if method in {"POST", "PUT", "PATCH"} or (endpoint.get("body") or {}).get("mode") not in {None, "none"}:
+            needs.append((
+                "required",
+                "campos obligatorios",
+                f"Enviar {method} {path} omitiendo un dato obligatorio o enviando formato invalido.",
+                "La API rechaza la solicitud con error controlado y mensaje claro.",
+                not any(word in blobs for word in ("obligatorio", "required", "invalido", "400", "validacion")),
+            ))
+        if endpoint.get("auth", {}).get("type") != "noauth":
+            needs.append((
+                "auth",
+                "sin autorizacion",
+                f"Ejecutar {method} {path} sin token, con token vencido o credencial invalida.",
+                "La API responde 401 o 403 sin exponer informacion sensible.",
+                not any(word in blobs for word in ("401", "403", "token", "autorizacion", "authorization")),
+            ))
+        if endpoint.get("path_params") or re.search(r"\{[^}]+\}|:[A-Za-z0-9_]+", path):
+            needs.append((
+                "not_found",
+                "identificador inexistente",
+                f"Ejecutar {method} {path} con identificador inexistente o mal formado.",
+                "La API responde error controlado, idealmente 400 o 404.",
+                not any(word in blobs for word in ("404", "inexistente", "no encontrado", "not found")),
+            ))
+        if method == "GET" and endpoint.get("query_params"):
+            needs.append((
+                "filters",
+                "filtros y paginacion",
+                f"Ejecutar {method} {path} combinando filtros, valores vacios y limites de paginacion.",
+                "La API filtra correctamente o informa error de validacion cuando corresponde.",
+                not any(word in blobs for word in ("filtro", "query", "paginacion", "pagina")),
+            ))
+
+        for suffix, title, description, expected, should_add in needs:
+            if not should_add:
+                continue
+            case = _generated_case(endpoint, suffix, title, description, expected, case_number)
+            generated.append(case)
+            adjustments["added"].append({"endpoint": f"{method} {path}", "case": case["name"]})
+            case_number += 1
+
+    if compare_excel:
+        for assoc in associations:
+            if not assoc.get("endpoint_id") and assoc.get("case_id") in case_by_id:
+                case = case_by_id[assoc["case_id"]]
+                adjustments["extra"].append({"case": case.get("name", case.get("case_id", "")), "reason": "No se encontro endpoint relacionado."})
+
+    if not compare_excel:
+        adjustments = {"added": [], "extra": []}
+    return generated, adjustments
+
+
 def _detect_conflicts(endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     conflicts: List[Dict[str, Any]] = []
     seen: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -603,6 +724,15 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
     variables, secret_warnings = _extract_variables(sources, endpoints)
     warnings.extend(secret_warnings)
     associations = _associate(test_cases, endpoints)
+    generated_cases, case_adjustments = _complete_qa_case_coverage(
+        endpoints,
+        test_cases,
+        associations,
+        any(source.get("is_cases_file") for source in sources),
+    )
+    if generated_cases:
+        test_cases.extend(generated_cases)
+        associations = _associate(test_cases, endpoints)
     endpoint_ids_with_case = {a["endpoint_id"] for a in associations if a.get("endpoint_id")}
     for endpoint in endpoints:
         if endpoint["id"] not in endpoint_ids_with_case:
@@ -630,6 +760,7 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
         "dependencies": [],
         "warnings": warnings,
         "conflicts": _detect_conflicts(endpoints),
+        "case_adjustments": case_adjustments,
         "folders": ["Endpoints", "Casos de prueba"],
         "validation": {},
     }
