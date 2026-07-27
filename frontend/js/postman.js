@@ -67,8 +67,6 @@ function renderResult(draft) {
     </div>
     <div class="pm-actions">
       <button class="pm-primary" type="button" data-download="collection">Descargar collection</button>
-      <button class="btn-secondary" type="button" data-download="environment">Descargar environment</button>
-      <button class="btn-secondary" type="button" data-download="zip">Descargar ZIP</button>
     </div>
     <section class="pm-guide">
       <h3>Como cargarlo en Postman</h3>
@@ -76,7 +74,6 @@ function renderResult(draft) {
         <li>Abrir Postman.</li>
         <li>Ir a Import.</li>
         <li>Seleccionar el archivo collection descargado.</li>
-        <li>Si descargaste environment, importarlo tambien y seleccionarlo arriba a la derecha.</li>
         <li>Completar variables vacias antes de ejecutar.</li>
       </ol>
     </section>
@@ -95,8 +92,6 @@ async function downloadFile(kind) {
   if (!currentDraft) return;
   const filenames = {
     collection: 'collection.json',
-    environment: 'environment.json',
-    zip: 'qa_postman_package.zip',
   };
   setStatus('Preparando descarga...');
   const res = await authFetch(`/api/postman/drafts/${currentDraft.id}/download/${kind}`);
