@@ -599,11 +599,36 @@ def _generated_case(endpoint: Dict[str, Any], suffix: str, title: str, descripti
     }
 
 
+BUSINESS_RULE_RE = re.compile(
+    r"(?i)(regla de negocio|logica de negocio|lógica de negocio|debe validar|no debe|solo si|"
+    r"excepto|condicion|condición|estado|limite|límite|monto|fecha|vigente|vencid|"
+    r"duplicad|permiso|habilitad|bloquead|aprobaci[oó]n|rechaz)"
+)
+
+
+def _endpoint_context(endpoint: Dict[str, Any], endpoint_cases: List[Dict[str, Any]], source_text: str = "") -> str:
+    parts = [
+        endpoint.get("name", ""),
+        endpoint.get("description", ""),
+        endpoint.get("path", ""),
+        json.dumps(endpoint.get("responses") or [], ensure_ascii=False),
+        " ".join(_case_blob(case) for case in endpoint_cases),
+    ]
+    path_tokens = [token for token in re.split(r"[^A-Za-z0-9]+", endpoint.get("path", "")) if len(token) > 3]
+    if source_text and path_tokens:
+        for line in source_text.splitlines():
+            lowered = line.lower()
+            if any(token.lower() in lowered for token in path_tokens) and BUSINESS_RULE_RE.search(line):
+                parts.append(line)
+    return " ".join(str(part) for part in parts if part)
+
+
 def _complete_qa_case_coverage(
     endpoints: List[Dict[str, Any]],
     test_cases: List[Dict[str, Any]],
     associations: List[Dict[str, Any]],
     compare_excel: bool = False,
+    source_text: str = "",
 ) -> Tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, str]]]]:
     case_by_id = {case["id"]: case for case in test_cases}
     cases_by_endpoint: Dict[str, List[Dict[str, Any]]] = {}
@@ -618,49 +643,33 @@ def _complete_qa_case_coverage(
     for endpoint in endpoints:
         endpoint_cases = cases_by_endpoint.get(endpoint.get("id", ""), [])
         blobs = " ".join(_case_blob(case) for case in endpoint_cases)
+        context = _endpoint_context(endpoint, endpoint_cases, source_text)
         method = endpoint.get("method", "GET")
         path = endpoint.get("path", endpoint.get("name", "endpoint"))
 
         needs = [
             (
                 "ok",
-                "camino feliz",
+                "caso base OK",
                 f"Validar que el endpoint {method} {path} responda correctamente con datos validos.",
                 "Respuesta exitosa y payload coherente con la documentacion.",
                 not any(word in blobs for word in ("ok", "exito", "exitoso", "valido", "happy")),
-            )
+            ),
+            (
+                "base_error",
+                "caso base con error",
+                f"Validar que el endpoint {method} {path} rechace una solicitud incorrecta o incompleta.",
+                "La API responde con error controlado, sin guardar informacion invalida y con mensaje entendible.",
+                not any(word in blobs for word in ("error", "invalido", "incorrecto", "400", "401", "403", "404", "negativo")),
+            ),
         ]
-        if method in {"POST", "PUT", "PATCH"} or (endpoint.get("body") or {}).get("mode") not in {None, "none"}:
+        if BUSINESS_RULE_RE.search(context) and not any(word in blobs for word in ("negocio", "regla", "condicion", "condición")):
             needs.append((
-                "required",
-                "campos obligatorios",
-                f"Enviar {method} {path} omitiendo un dato obligatorio o enviando formato invalido.",
-                "La API rechaza la solicitud con error controlado y mensaje claro.",
-                not any(word in blobs for word in ("obligatorio", "required", "invalido", "400", "validacion")),
-            ))
-        if endpoint.get("auth", {}).get("type") != "noauth":
-            needs.append((
-                "auth",
-                "sin autorizacion",
-                f"Ejecutar {method} {path} sin token, con token vencido o credencial invalida.",
-                "La API responde 401 o 403 sin exponer informacion sensible.",
-                not any(word in blobs for word in ("401", "403", "token", "autorizacion", "authorization")),
-            ))
-        if endpoint.get("path_params") or re.search(r"\{[^}]+\}|:[A-Za-z0-9_]+", path):
-            needs.append((
-                "not_found",
-                "identificador inexistente",
-                f"Ejecutar {method} {path} con identificador inexistente o mal formado.",
-                "La API responde error controlado, idealmente 400 o 404.",
-                not any(word in blobs for word in ("404", "inexistente", "no encontrado", "not found")),
-            ))
-        if method == "GET" and endpoint.get("query_params"):
-            needs.append((
-                "filters",
-                "filtros y paginacion",
-                f"Ejecutar {method} {path} combinando filtros, valores vacios y limites de paginacion.",
-                "La API filtra correctamente o informa error de validacion cuando corresponde.",
-                not any(word in blobs for word in ("filtro", "query", "paginacion", "pagina")),
+                "business_rule",
+                "logica de negocio",
+                f"Validar la regla de negocio detectada para {method} {path}.",
+                "La API aplica la regla de negocio documentada y responde correctamente ante escenarios limite.",
+                True,
             ))
 
         for suffix, title, description, expected, should_add in needs:
@@ -724,11 +733,13 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
     variables, secret_warnings = _extract_variables(sources, endpoints)
     warnings.extend(secret_warnings)
     associations = _associate(test_cases, endpoints)
+    coverage_source_text = "\n".join(source.get("text", "") for source in sources)
     generated_cases, case_adjustments = _complete_qa_case_coverage(
         endpoints,
         test_cases,
         associations,
         any(source.get("is_cases_file") for source in sources),
+        coverage_source_text,
     )
     if generated_cases:
         test_cases.extend(generated_cases)

@@ -97,7 +97,7 @@ Resultado esperado: Rechazo controlado.
         self.assertEqual(source["extension"], ".xlsx")
         self.assertIn("Crear siniestro", source["text"])
 
-    def test_endpoint_without_excel_gets_senior_qa_cases(self):
+    def test_endpoint_without_excel_gets_base_ok_and_base_error_cases(self):
         openapi = """
 openapi: 3.0.0
 paths:
@@ -117,9 +117,28 @@ paths:
             [{"name": "polizas.yaml", "extension": ".yaml", "text": openapi, "size": len(openapi), "warning": ""}]
         )
         generated = [case for case in model["test_cases"] if case.get("generated")]
-        self.assertGreaterEqual(len(generated), 4)
-        self.assertTrue(any("camino feliz" in case["name"] for case in generated))
-        self.assertTrue(any("sin autorizacion" in case["name"] for case in generated))
+        self.assertEqual(len(generated), 2)
+        self.assertTrue(any("caso base OK" in case["name"] for case in generated))
+        self.assertTrue(any("caso base con error" in case["name"] for case in generated))
+
+    def test_business_rule_case_is_generated_only_when_documented(self):
+        openapi = """
+openapi: 3.0.0
+paths:
+  /cotizaciones:
+    post:
+      summary: Crear cotizacion
+      description: Debe validar regla de negocio de monto limite y estado vigente.
+      responses:
+        "200":
+          description: OK
+"""
+        model = build_intermediate_model(
+            [{"name": "cotizaciones.yaml", "extension": ".yaml", "text": openapi, "size": len(openapi), "warning": ""}]
+        )
+        generated = [case for case in model["test_cases"] if case.get("generated")]
+        self.assertEqual(len(generated), 3)
+        self.assertTrue(any("logica de negocio" in case["name"] for case in generated))
 
 
 if __name__ == "__main__":
