@@ -1,16 +1,27 @@
 import json
 import sys
 import unittest
+from io import BytesIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from services.postman_generator import (  # noqa: E402
+    _read_upload,
     build_collection,
     build_environment,
     build_intermediate_model,
     validate_model,
 )
+
+
+class AsyncUpload:
+    def __init__(self, filename, data):
+        self.filename = filename
+        self._data = data
+
+    async def read(self):
+        return self._data
 
 
 class PostmanGeneratorTests(unittest.TestCase):
@@ -67,6 +78,24 @@ Resultado esperado: Rechazo controlado.
         validation = validate_model(model)
         self.assertTrue(validation["valid"])
         self.assertIn("collection", json.dumps(build_collection(model)))
+
+    def test_xlsx_cases_file_is_readable(self):
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Casos"
+        sheet.append(["ID", "Nombre", "Resultado esperado"])
+        sheet.append(["CP-01", "Crear siniestro", "HTTP 201"])
+        buffer = BytesIO()
+        workbook.save(buffer)
+        upload = AsyncUpload("casos.xlsx", buffer.getvalue())
+
+        import asyncio
+
+        source = asyncio.run(_read_upload(upload))
+        self.assertEqual(source["extension"], ".xlsx")
+        self.assertIn("Crear siniestro", source["text"])
 
 
 if __name__ == "__main__":

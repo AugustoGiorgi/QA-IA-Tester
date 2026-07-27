@@ -7,13 +7,13 @@
   <link rel="stylesheet" href="/app/dashboard.css?v=20260724-2" />
   <style>
     :root {
-      --pm-panel: rgba(17, 24, 39, 0.9);
-      --pm-panel-2: #0f172a;
-      --pm-panel-3: #08111f;
-      --pm-line: #253044;
-      --pm-line-soft: rgba(148, 163, 184, 0.16);
+      --pm-bg: #07101f;
+      --pm-panel: rgba(15, 23, 42, .94);
+      --pm-panel-soft: rgba(8, 17, 31, .72);
+      --pm-line: rgba(96, 165, 250, .24);
+      --pm-line-strong: rgba(96, 165, 250, .48);
       --pm-blue: #2563eb;
-      --pm-blue-soft: rgba(37, 99, 235, 0.16);
+      --pm-blue-2: #3b82f6;
       --pm-text: #f8fafc;
       --pm-muted: #94a3b8;
       --pm-green: #22c55e;
@@ -23,8 +23,8 @@
 
     body.module-page {
       background:
-        radial-gradient(circle at 84% -8%, rgba(37, 99, 235, 0.18), transparent 28rem),
-        linear-gradient(180deg, #0b1530 0%, #07101f 52%);
+        radial-gradient(circle at 88% -12%, rgba(37, 99, 235, .18), transparent 28rem),
+        linear-gradient(180deg, #0b1530 0%, var(--pm-bg) 58%);
     }
 
     body.module-page .module-container {
@@ -32,10 +32,6 @@
     }
 
     body.module-page .page-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 18px;
-      align-items: flex-end;
       margin-bottom: 18px;
       padding-bottom: 18px;
     }
@@ -44,161 +40,143 @@
       font-size: clamp(2rem, 3vw, 2.7rem);
     }
 
-    body.module-page .postman-grid {
-      grid-template-columns: minmax(370px, 460px) minmax(0, 1fr);
+    .postman-grid {
+      display: grid;
+      grid-template-columns: minmax(380px, 500px) minmax(0, 1fr);
       gap: 20px;
       align-items: start;
     }
 
-    .postman-source-panel,
-    .postman-review-panel {
-      position: relative;
-      overflow: hidden;
-      padding: 24px;
+    .postman-panel {
       border: 1px solid var(--pm-line);
       border-radius: 10px;
-      background:
-        linear-gradient(180deg, rgba(15, 23, 42, .94), rgba(8, 17, 31, .96));
+      background: linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(8, 17, 31, .95));
       box-shadow: 0 18px 55px rgba(0, 0, 0, .2);
     }
 
-    .postman-source-panel {
+    .postman-form {
       position: sticky;
       top: 18px;
-      border-color: rgba(96, 165, 250, .32);
+      display: grid;
+      gap: 18px;
+      padding: 24px;
     }
 
-    .postman-source-panel h2,
-    .postman-review-panel h2 {
-      margin: 0 0 6px;
-      color: #fff;
-      font-size: 1.15rem;
+    .postman-result {
+      min-height: 620px;
+      padding: 24px;
     }
 
-    .source-head {
+    .pm-section {
+      display: grid;
+      gap: 10px;
+    }
+
+    .pm-section-head {
       display: flex;
       justify-content: space-between;
-      gap: 14px;
+      gap: 12px;
       align-items: center;
-      margin-bottom: 16px;
     }
 
-    .source-step {
+    .pm-section h2 {
+      margin: 0;
+      color: #fff;
+      font-size: 1.08rem;
+    }
+
+    .pm-pill {
       display: inline-grid;
-      min-width: 34px;
-      height: 34px;
+      min-width: 30px;
+      height: 30px;
       place-items: center;
-      border: 1px solid rgba(96, 165, 250, .42);
+      border: 1px solid var(--pm-line-strong);
       border-radius: 999px;
       color: #bfdbfe;
       background: rgba(37, 99, 235, .16);
+      font-size: .82rem;
       font-weight: 900;
     }
 
-    .postman-source-panel label {
+    .pm-dropzone {
       display: grid;
-      gap: 8px;
-      margin-top: 14px;
-    }
-
-    .postman-source-panel input,
-    .postman-source-panel textarea,
-    .pm-card input,
-    .pm-card textarea,
-    .pm-card select,
-    .pm-table select {
-      border-color: rgba(96, 165, 250, .26) !important;
-      border-radius: 8px !important;
-      background: rgba(8, 17, 31, .72) !important;
-      color: var(--pm-text) !important;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .02) !important;
-      box-sizing: border-box !important;
-      width: 100% !important;
-    }
-
-    .postman-source-panel input:focus,
-    .postman-source-panel textarea:focus,
-    .pm-card input:focus,
-    .pm-card textarea:focus,
-    .pm-card select:focus,
-    .pm-table select:focus {
-      border-color: #60a5fa !important;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, .18) !important;
-    }
-
-    .postman-dropzone {
-      display: grid !important;
-      width: min(100%, 504px);
-      min-height: 285px;
+      min-height: 220px;
       place-items: center;
-      gap: 14px;
-      margin-top: 0 !important;
-      margin-left: auto !important;
-      margin-right: auto !important;
-      padding: 30px 26px !important;
-      border: 2px dashed rgba(96, 165, 250, .58) !important;
-      border-radius: 10px !important;
-      box-sizing: border-box !important;
+      gap: 12px;
+      padding: 24px;
+      border: 2px dashed rgba(96, 165, 250, .56);
+      border-radius: 10px;
+      box-sizing: border-box;
       background:
-        radial-gradient(circle at top, rgba(37, 99, 235, .2), transparent 62%),
-        rgba(8, 17, 31, .68) !important;
+        radial-gradient(circle at top, rgba(37, 99, 235, .18), transparent 62%),
+        rgba(8, 17, 31, .66);
+      color: var(--pm-text);
       text-align: center;
       cursor: pointer;
       transition: border-color .18s ease, transform .18s ease, background .18s ease;
     }
 
-    .postman-dropzone:hover {
-      border-color: rgba(147, 197, 253, .8) !important;
-      background: rgba(37, 99, 235, .12) !important;
+    .pm-dropzone.compact {
+      min-height: 132px;
+      padding: 18px;
+      border-style: solid;
+      background: rgba(8, 17, 31, .58);
+    }
+
+    .pm-dropzone:hover {
+      border-color: rgba(147, 197, 253, .82);
+      background: rgba(37, 99, 235, .11);
       transform: translateY(-1px);
     }
 
-    .postman-dropzone input {
+    .pm-dropzone input {
       display: none;
     }
 
-    .drop-icon {
+    .pm-icon {
       display: inline-grid;
-      width: 64px;
-      height: 64px;
+      width: 58px;
+      height: 58px;
       place-items: center;
       border: 1px solid rgba(147, 197, 253, .36);
-      border-radius: 16px;
-      color: #fff;
-      background: linear-gradient(180deg, #2563eb, #1d4ed8);
-      font-weight: 900;
+      border-radius: 15px;
+      background: linear-gradient(180deg, var(--pm-blue-2), var(--pm-blue));
       box-shadow: 0 16px 34px rgba(37, 99, 235, .28);
-    }
-
-    .upload-title {
-      display: grid;
-      gap: 6px;
       color: #fff;
-      font-size: 1.05rem;
-      line-height: 1.25;
+      font-weight: 900;
     }
 
-    .upload-title small {
-      color: #93c5fd;
-      font-size: .86rem;
-      font-weight: 800;
+    .pm-dropzone.compact .pm-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
     }
 
-    .postman-file-list {
-      display: flex;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 7px;
-      max-width: 100%;
+    .pm-upload-title {
+      display: grid;
+      gap: 4px;
+      font-weight: 900;
+    }
+
+    .pm-upload-title small,
+    .pm-help {
       color: var(--pm-muted);
       font-size: .82rem;
       line-height: 1.35;
     }
 
-    .postman-file-pill {
+    .pm-files {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      color: var(--pm-muted);
+      font-size: .82rem;
+    }
+
+    .pm-file-chip {
       display: inline-flex;
       max-width: 100%;
-      align-items: center;
       padding: 6px 9px;
       border: 1px solid rgba(96, 165, 250, .3);
       border-radius: 999px;
@@ -209,74 +187,100 @@
       overflow-wrap: anywhere;
     }
 
-    .postman-input-stack {
+    .postman-form label:not(.pm-dropzone) {
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 14px;
-      margin-top: 16px;
-      width: min(100%, 504px);
-      margin-left: auto;
-      margin-right: auto;
+      gap: 8px;
+      color: var(--pm-text);
+      font-weight: 800;
     }
 
-    .postman-source-panel button[type="submit"] {
-      display: block;
-      width: min(100%, 504px);
-      min-height: 44px;
-      margin-top: 16px;
-      margin-left: auto;
-      margin-right: auto;
+    .postman-form input,
+    .postman-form textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid rgba(96, 165, 250, .26) !important;
+      border-radius: 8px !important;
+      background: var(--pm-panel-soft) !important;
+      color: var(--pm-text) !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .02) !important;
+    }
+
+    .postman-form input:focus,
+    .postman-form textarea:focus {
+      border-color: #60a5fa !important;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .18) !important;
+    }
+
+    .pm-primary {
+      min-height: 46px;
       border: 1px solid rgba(96, 165, 250, .52) !important;
       border-radius: 8px !important;
       color: #fff !important;
-      background: linear-gradient(180deg, #2f6df3 0%, #2563eb 100%) !important;
+      background: linear-gradient(180deg, #2f6df3 0%, var(--pm-blue) 100%) !important;
       box-shadow: 0 16px 30px rgba(37, 99, 235, .24) !important;
       font-weight: 900 !important;
       cursor: pointer;
     }
 
-    .postman-source-panel button[type="submit"]:hover {
+    .pm-primary:hover {
       border-color: rgba(147, 197, 253, .72) !important;
-      background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%) !important;
+      background: linear-gradient(180deg, var(--pm-blue-2), var(--pm-blue)) !important;
       transform: translateY(-1px);
     }
 
-    .postman-tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 16px 0;
-      padding: 6px;
-      width: fit-content;
-      max-width: 100%;
-      border: 1px solid var(--pm-line);
-      border-radius: 10px;
-      background: rgba(8, 17, 31, .68);
+    .pm-primary:disabled {
+      opacity: .58;
+      cursor: wait;
+      transform: none;
     }
 
-    .postman-tabs button {
-      width: auto;
-      min-height: 38px;
-      padding: 0 13px !important;
-      border: 1px solid transparent !important;
-      border-radius: 8px !important;
-      color: #cbd5e1 !important;
-      background: transparent !important;
-      box-shadow: none !important;
-      font-size: .86rem;
+    .pm-status {
+      min-height: 22px;
+      color: #fecaca;
+      font-weight: 800;
     }
 
-    .postman-tabs button.active {
-      color: #fff !important;
-      border-color: rgba(147, 197, 253, .44) !important;
-      background: linear-gradient(180deg, #2563eb, #1d4ed8) !important;
+    .pm-status.ok {
+      color: #86efac;
     }
 
-    .postman-summary {
+    .pm-empty {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      min-height: 520px;
+      place-items: center;
+      border: 1px solid rgba(148, 163, 184, .14);
+      border-radius: 10px;
+      background: rgba(8, 17, 31, .42);
+      color: var(--pm-muted);
+      text-align: center;
+    }
+
+    .pm-loader {
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+      color: #dbeafe;
+      text-align: center;
+    }
+
+    .pm-spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid rgba(96, 165, 250, .18);
+      border-top-color: #60a5fa;
+      border-radius: 999px;
+      animation: spin .8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .pm-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
-      margin: 16px 0 4px;
+      margin: 18px 0;
     }
 
     .pm-metric {
@@ -286,152 +290,79 @@
       padding: 14px;
       border: 1px solid var(--pm-line);
       border-radius: 10px;
-      background:
-        linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(8, 17, 31, .94));
+      background: rgba(8, 17, 31, .48);
     }
 
     .pm-metric span {
       color: var(--pm-muted);
       font-size: .78rem;
-      font-weight: 700;
+      font-weight: 800;
     }
 
     .pm-metric strong {
       color: #fff;
-      font-size: 1.65rem;
+      font-size: 1.7rem;
       line-height: 1;
-    }
-
-    .pm-list {
-      display: grid;
-      gap: 12px;
-      min-height: 360px;
-      padding: 4px 0 0;
-    }
-
-    .pm-empty {
-      display: grid;
-      min-height: 250px;
-      place-items: center;
-      border: 1px solid var(--pm-line-soft);
-      border-radius: 10px;
-      background: rgba(8, 17, 31, .42);
-      color: var(--pm-muted);
-      text-align: center;
-    }
-
-    .review-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 14px;
-      align-items: center;
-    }
-
-    .pm-card {
-      border: 1px solid var(--pm-line);
-      border-left: 4px solid #60a5fa;
-      border-radius: 10px;
-      padding: 15px;
-      background:
-        linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(8, 17, 31, .94));
-    }
-
-    .pm-card.warn { border-left-color: var(--pm-yellow); }
-    .pm-card.bad { border-left-color: var(--pm-red); }
-    .pm-card.ok { border-left-color: var(--pm-green); }
-
-    .pm-card-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 14px;
-      align-items: flex-start;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--pm-line-soft);
-    }
-
-    .pm-card strong {
-      color: #fff;
-    }
-
-    .pm-card code {
-      display: inline-flex;
-      padding: 3px 7px;
-      border: 1px solid rgba(96, 165, 250, .3);
-      border-radius: 999px;
-      color: #bfdbfe;
-      background: rgba(37, 99, 235, .12);
-      font-weight: 800;
-    }
-
-    .pm-editor {
-      display: grid;
-      gap: 11px;
-      margin-top: 12px;
-    }
-
-    .pm-editor.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .pm-editor.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-
-    .pm-table-wrap {
-      overflow-x: auto;
-      border: 1px solid var(--pm-line);
-      border-radius: 10px;
-    }
-
-    .pm-table {
-      width: 100%;
-      min-width: 860px;
-      border-collapse: collapse;
-      background: rgba(15, 23, 42, .82);
-    }
-
-    .pm-table th,
-    .pm-table td {
-      padding: 12px;
-      border-bottom: 1px solid var(--pm-line-soft);
-      text-align: left;
-      vertical-align: top;
-    }
-
-    .pm-table th {
-      color: #dbeafe;
-      background: #0b1a30;
-      font-size: .8rem;
-    }
-
-    .pm-table select {
-      min-width: 180px;
     }
 
     .pm-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-top: 14px;
+      margin: 14px 0 22px;
     }
 
-    .pm-downloads button[data-download] {
+    .pm-actions button {
       width: auto;
-      min-height: 40px;
-      padding: 0 14px !important;
-      border: 1px solid rgba(96, 165, 250, .5) !important;
-      border-radius: 8px !important;
-      color: #fff !important;
-      background: linear-gradient(180deg, #2563eb, #1d4ed8) !important;
-      font-weight: 800;
+      min-height: 42px;
+      padding: 0 15px !important;
     }
 
-    .hidden { display: none !important; }
+    .pm-guide {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid var(--pm-line);
+      border-radius: 10px;
+      background: rgba(8, 17, 31, .46);
+    }
+
+    .pm-guide h3 {
+      margin: 0;
+      color: #fff;
+      font-size: 1rem;
+    }
+
+    .pm-guide ol {
+      margin: 0;
+      padding-left: 20px;
+      color: #dbeafe;
+      line-height: 1.65;
+    }
+
+    .pm-warning-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .pm-warning {
+      padding: 11px 12px;
+      border: 1px solid rgba(245, 158, 11, .28);
+      border-radius: 8px;
+      background: rgba(245, 158, 11, .08);
+      color: #fde68a;
+      font-size: .88rem;
+    }
 
     @media (max-width: 980px) {
-      body.module-page .postman-grid,
-      .postman-summary,
-      .pm-editor.two,
-      .pm-editor.three {
+      .postman-grid,
+      .pm-summary {
         grid-template-columns: 1fr;
       }
 
-      .postman-source-panel {
+      .postman-form {
         position: static;
       }
     }
@@ -440,62 +371,63 @@
 <body class="module-page">
   <main class="module-container">
     <header class="page-head">
-      <div>
-        <h1>Postman</h1>
-      </div>
+      <h1>Postman</h1>
     </header>
 
-    <section class="module-grid postman-grid">
-      <form id="postmanForm" class="postman-source-panel module-form">
-        <div class="source-head">
-          <h2>Cargar fuentes</h2>
-          <span class="source-step">1</span>
-        </div>
-        <label class="postman-dropzone" id="dropzone">
-          <span class="drop-icon">API</span>
-          <span class="upload-title">
-            <strong>Arrastra archivos aca</strong>
-            <small>o toca para seleccionarlos</small>
-          </span>
-          <span id="fileSummary" class="postman-file-list">
-            JSON, YAML, MD, TXT, DOCX, PDF, cURL, HTTP o Postman
-          </span>
-          <input id="sourceFiles" type="file" multiple accept=".json,.yaml,.yml,.md,.txt,.docx,.pdf,.xml,.curl,.http" />
+    <section class="postman-grid">
+      <form id="postmanForm" class="postman-panel postman-form">
+        <section class="pm-section">
+          <div class="pm-section-head">
+            <h2>Archivos principales</h2>
+            <span class="pm-pill">1</span>
+          </div>
+          <label class="pm-dropzone">
+            <span class="pm-icon">API</span>
+            <span class="pm-upload-title">
+              <strong>Cargar documentos de la API</strong>
+              <small>Collection, funcionales, Swagger, cURL, PDF, DOCX o TXT</small>
+            </span>
+            <span id="sourceSummary" class="pm-files">Sin archivos seleccionados</span>
+            <input id="sourceFiles" type="file" multiple accept=".json,.yaml,.yml,.md,.txt,.docx,.pdf,.xml,.curl,.http,.csv,.xlsx" />
+          </label>
+        </section>
+
+        <section class="pm-section">
+          <div class="pm-section-head">
+            <h2>Excel de casos</h2>
+            <span class="pm-pill">2</span>
+          </div>
+          <label class="pm-dropzone compact">
+            <span class="pm-icon">XLS</span>
+            <span class="pm-upload-title">
+              <strong>Opcional</strong>
+              <small>Si lo cargas, se usa para comparar casos faltantes o sobrantes</small>
+            </span>
+            <span id="caseSummary" class="pm-files">Sin Excel cargado</span>
+            <input id="caseFile" type="file" accept=".xlsx,.csv,.txt" />
+          </label>
+        </section>
+
+        <label>Nombre del proyecto
+          <input id="projectName" type="text" placeholder="Proyecto API" />
         </label>
 
-        <div class="postman-input-stack">
-          <label>Nombre del proyecto
-            <input id="projectName" type="text" placeholder="Proyecto API" />
-          </label>
-          <label>Texto o cURL
-            <textarea id="manualText" rows="8" placeholder="Pega endpoints, cURL, casos, variables o ejemplos request/response"></textarea>
-          </label>
-        </div>
-        <button id="analyzeBtn" type="submit">Analizar fuentes</button>
-        <div id="postmanStatus" class="field-error"></div>
+        <label>Comentarios
+          <textarea id="manualText" rows="6" placeholder="Aclaraciones, reglas de negocio, datos obligatorios, auth, ambiente o criterios especiales"></textarea>
+        </label>
+
+        <button id="analyzeBtn" class="pm-primary" type="submit">Generar collection</button>
+        <div id="postmanStatus" class="pm-status"></div>
       </form>
 
-      <section class="postman-review-panel">
-        <div class="review-head">
-          <h2>Revision</h2>
-          <button id="refreshDrafts" type="button" class="btn-secondary">Biblioteca</button>
-        </div>
-        <div id="summary" class="postman-summary"></div>
-        <nav class="postman-tabs">
-          <button type="button" class="active" data-tab="endpoints">Endpoints</button>
-          <button type="button" data-tab="cases">Casos</button>
-          <button type="button" data-tab="trace">Trazabilidad</button>
-          <button type="button" data-tab="variables">Variables</button>
-          <button type="button" data-tab="warnings">Advertencias</button>
-          <button type="button" data-tab="downloads">Descargas</button>
-        </nav>
-        <div id="tabContent" class="pm-list">
-          <div class="pm-empty"><p>Sin analisis todavia.</p></div>
+      <section class="postman-panel postman-result">
+        <div id="resultPanel" class="pm-empty">
+          <p>Carga los insumos y genera la collection.</p>
         </div>
       </section>
     </section>
   </main>
 
-  <script type="module" src="/app/js/postman.js?v=20260724-3"></script>
+  <script type="module" src="/app/js/postman.js?v=20260727-1"></script>
 </body>
 </html>

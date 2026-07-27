@@ -86,6 +86,21 @@ async def _read_upload(file: UploadFile) -> Dict[str, Any]:
                 text = docx_to_text(str(tmp))
             finally:
                 tmp.unlink(missing_ok=True)
+        elif suffix == ".xlsx":
+            try:
+                from openpyxl import load_workbook
+
+                workbook = load_workbook(BytesIO(raw), read_only=True, data_only=True)
+                lines: List[str] = []
+                for sheet in workbook.worksheets:
+                    lines.append(f"HOJA: {sheet.title}")
+                    for row in sheet.iter_rows(values_only=True):
+                        values = [str(value).strip() for value in row if value not in (None, "")]
+                        if values:
+                            lines.append(" | ".join(values))
+                text = "\n".join(lines)
+            except Exception:
+                parse_warning = "No se pudo leer el Excel. Verifica que sea .xlsx valido."
         elif suffix == ".pdf":
             try:
                 from pypdf import PdfReader
@@ -836,15 +851,26 @@ async def _get_draft(draft_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
 @router.post("/analyze")
 async def analyze_postman_sources(
     files: Optional[List[UploadFile]] = File(default=None),
+    test_cases_file: Optional[UploadFile] = File(default=None),
     manual_text: str = Form(default=""),
     project_name: str = Form(default=""),
     user: Dict[str, Any] = Depends(current_user),
 ):
     _require_qa(user)
     sources = [await _read_upload(file) for file in (files or [])]
+    case_source = None
+    if test_cases_file and test_cases_file.filename:
+        case_source = await _read_upload(test_cases_file)
+        case_source["is_cases_file"] = True
+        sources.append(case_source)
     if not sources and not manual_text.strip():
         raise HTTPException(status_code=400, detail="Carga al menos un archivo o texto.")
     model = build_intermediate_model(sources, manual_text)
+    if case_source:
+        model["cases_source"] = {
+            "name": case_source["name"],
+            "detected_cases": len([case for case in model["test_cases"] if case.get("source_refs", [{}])[0].get("source") == case_source["name"]]),
+        }
     model["validation"] = validate_model(model)
     now = _now()
     doc = {
@@ -863,7 +889,8 @@ async def analyze_postman_sources(
         f"Analizo fuentes para Postman: {doc['project_name']}",
         {
             "draft_id": str(result.inserted_id),
-            "fuentes": [source["name"] for source in sources],
+            "fuentes": [source["name"] for source in sources if not source.get("is_cases_file")],
+            "archivo_casos": case_source["name"] if case_source else "",
             "endpoints": len(model["endpoints"]),
             "casos": len(model["test_cases"]),
             "warnings": len(model["warnings"]),
