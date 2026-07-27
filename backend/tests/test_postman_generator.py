@@ -140,6 +140,24 @@ paths:
         self.assertEqual(len(generated), 3)
         self.assertTrue(any("logica de negocio" in case["name"] for case in generated))
 
+    def test_postman_collection_repeated_requests_count_as_unique_endpoint(self):
+        collection = {
+            "info": {"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+            "item": [
+                {"name": "CP-01", "item": [
+                    {"name": "Consultar asegurado OK", "request": {"method": "GET", "url": {"raw": "{{baseUrl}}/api/v1/Global/consultarasegurado?cuit={{cuit}}"}}},
+                ]},
+                {"name": "CP-02", "item": [
+                    {"name": "Consultar asegurado error", "request": {"method": "GET", "url": {"raw": "{{baseUrl}}/api/v1/Global/consultarasegurado?cuit={{cuitInvalido}}"}}},
+                ]},
+            ],
+        }
+        text = json.dumps(collection)
+        model = build_intermediate_model(
+            [{"name": "collection.json", "extension": ".json", "text": text, "size": len(text), "warning": ""}]
+        )
+        self.assertEqual(len(model["endpoints"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

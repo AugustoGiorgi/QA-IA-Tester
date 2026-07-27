@@ -179,6 +179,42 @@ def _endpoint_id(method: str, path: str, index: int) -> str:
     return f"req_{method.lower()}_{_safe_key(path, 'path')}_{index}"
 
 
+def _normalized_endpoint_key(endpoint: Dict[str, Any]) -> Tuple[str, str]:
+    method = str(endpoint.get("method") or "GET").upper()
+    path = str(endpoint.get("path") or endpoint.get("name") or "").split("?")[0].strip()
+    path = re.sub(r"https?://[^/]+", "", path)
+    path = re.sub(r"\{\{[^}]+\}\}", "{var}", path)
+    path = re.sub(r":([A-Za-z0-9_]+)", "{var}", path)
+    path = re.sub(r"\{[^}]+\}", "{var}", path)
+    path = re.sub(r"/+", "/", path).rstrip("/") or "/"
+    return method, path.lower()
+
+
+def _dedupe_endpoints(endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    unique: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for endpoint in endpoints:
+        key = _normalized_endpoint_key(endpoint)
+        existing = unique.get(key)
+        if not existing:
+            unique[key] = endpoint
+            continue
+        existing_refs = existing.setdefault("source_refs", [])
+        seen_refs = {(ref.get("source"), ref.get("kind"), ref.get("location")) for ref in existing_refs}
+        for ref in endpoint.get("source_refs", []):
+            ref_key = (ref.get("source"), ref.get("kind"), ref.get("location"))
+            if ref_key not in seen_refs:
+                existing_refs.append(ref)
+                seen_refs.add(ref_key)
+        existing_responses = existing.setdefault("responses", [])
+        seen_status = {str(resp.get("status")) for resp in existing_responses}
+        for response in endpoint.get("responses", []):
+            status = str(response.get("status"))
+            if status not in seen_status:
+                existing_responses.append(response)
+                seen_status.add(status)
+    return list(unique.values())
+
+
 def _openapi_endpoints(data: Dict[str, Any], source: Dict[str, Any]) -> List[Dict[str, Any]]:
     servers = data.get("servers") or []
     base_url = ""
@@ -730,6 +766,7 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
         endpoints.extend(_curl_endpoints(source.get("text", ""), source))
         endpoints.extend(_text_endpoints(source.get("text", ""), source))
         test_cases.extend(_extract_test_cases(source.get("text", ""), source))
+    endpoints = _dedupe_endpoints(endpoints)
     variables, secret_warnings = _extract_variables(sources, endpoints)
     warnings.extend(secret_warnings)
     associations = _associate(test_cases, endpoints)
