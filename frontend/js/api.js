@@ -28,7 +28,13 @@ export async function postFile(url, file, extraFields = {}) {
   });
 
   if (!res.ok) {
-    throw new Error(await res.text());
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || data.error || `Error HTTP ${res.status}`);
+    }
+    const text = await res.text();
+    throw new Error(text || `Error HTTP ${res.status}`);
   }
 
   return res;

@@ -1,6 +1,8 @@
 # backend/main.py  (Python 3.8+)
+import logging
 import os
 import re
+import traceback
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -49,6 +51,7 @@ from services.data_import import router as data_import_router
 from utils.excel import to_excel_bytes
 
 load_dotenv()
+logger = logging.getLogger("qa_doc_analyzer")
 
 # --- App FASTAPI ---
 app = FastAPI(title="QA Doc Analyzer API")
@@ -303,62 +306,85 @@ async def testcases(
 ):
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Subí un .docx")
-    filename = safe_filename(file.filename)
-    tmp_path = await save_upload(file, DATA_DIR / filename)
+    original_name = safe_filename(file.filename)
+    try:
+        tmp_path = await save_upload(file, DATA_DIR / original_name)
+    except Exception:
+        logger.exception("No se pudo guardar archivo para casos de prueba")
+        raise HTTPException(status_code=500, detail="No se pudo guardar el archivo subido.")
 
-    text = docx_to_text(str(tmp_path))
-    table_md = generate_testcases_markdown(text, get_recent_feedback_snippets(db))
+    try:
+        text = docx_to_text(str(tmp_path))
+    except Exception:
+        logger.exception("No se pudo leer DOCX para casos de prueba")
+        raise HTTPException(status_code=400, detail="No se pudo leer el DOCX. Verificá que el archivo no esté dañado.")
 
-    # -------- PARSER NUEVO: 5 columnas (número | objetivo | funcionalidad | resultado | observaciones)
-    rows: List[Dict[str, str]] = []
-    for row_map in first_table(table_md).rows:
-        numero = row_map.get("número", row_map.get("numero", ""))
-        rows.append({
-            "Caso de Prueba": numero or "1",
-            "Objetivo": row_map.get("objetivo de la prueba", ""),
-            "Paso a Paso": "",
-            "Resultado Esperado": row_map.get("resultado esperado", ""),
-            "Precondiciones": "",
-            "Prioridad": "",
-            "Datos de Prueba": "",
-            "Funcionalidad": row_map.get("funcionalidad", ""),
-            "Observaciones": row_map.get("observaciones", ""),
-        })
+    if not text or len(text.strip()) < 40:
+        raise HTTPException(status_code=400, detail="No se pudo extraer texto suficiente del DOCX.")
 
-    # Fallback minimal si no se pudo parsear
-    if not rows:
-        rows = [{
-            "Caso de Prueba": "1",
-            "Objetivo": "Validar funcionalidad principal del DF",
-            "Paso a Paso": "",
-            "Resultado Esperado": "Resultados según reglas del DF",
-            "Precondiciones": "",
-            "Prioridad": "",
-            "Datos de Prueba": "",
-            "Funcionalidad": "—",
-            "Observaciones": "",
-        }]
+    try:
+        table_md = generate_testcases_markdown(text, get_recent_feedback_snippets(db))
+    except Exception as exc:
+        logger.error("Fallo generación IA de casos: %s\n%s", exc, traceback.format_exc())
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudieron generar los casos con IA. Revisá configuración/cuota/modelo de OpenAI. Detalle: {type(exc).__name__}",
+        )
 
-    excel_bytes = to_excel_bytes(rows)
-    filename = f"casos_{safe_stem(filename)}.xlsx"
-    out_path = DATA_DIR / "outputs" / filename
-    out_path.write_bytes(excel_bytes)
+    try:
+        rows: List[Dict[str, str]] = []
+        for row_map in first_table(table_md).rows:
+            numero = row_map.get("número", row_map.get("numero", ""))
+            rows.append({
+                "Caso de Prueba": numero or "1",
+                "Objetivo": row_map.get("objetivo de la prueba", ""),
+                "Paso a Paso": "",
+                "Resultado Esperado": row_map.get("resultado esperado", ""),
+                "Precondiciones": "",
+                "Prioridad": "",
+                "Datos de Prueba": "",
+                "Funcionalidad": row_map.get("funcionalidad", ""),
+                "Observaciones": row_map.get("observaciones", ""),
+            })
+
+        if not rows:
+            rows = [{
+                "Caso de Prueba": "1",
+                "Objetivo": "Validar funcionalidad principal del DF",
+                "Paso a Paso": "",
+                "Resultado Esperado": "Resultados según reglas del DF",
+                "Precondiciones": "",
+                "Prioridad": "",
+                "Datos de Prueba": "",
+                "Funcionalidad": "—",
+                "Observaciones": "La IA no devolvió una tabla parseable; revisar el documento y regenerar.",
+            }]
+
+        excel_bytes = to_excel_bytes(rows)
+        output_name = f"casos_{safe_stem(original_name)}.xlsx"
+        out_path = DATA_DIR / "outputs" / output_name
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(excel_bytes)
+    except Exception:
+        logger.exception("No se pudo armar Excel de casos")
+        raise HTTPException(status_code=500, detail="Se generaron los casos, pero falló la creación del Excel.")
+
     await record_activity(
         user,
         "Generacion de casos de prueba",
         "casos",
-        f"Genero casos de prueba desde {safe_filename(file.filename)}",
+        f"Genero casos de prueba desde {original_name}",
         {
-            "archivo_cargado": safe_filename(file.filename),
-            "archivo_generado": filename,
-            "resultado_url": f"/api/outputs/{filename}",
+            "archivo_cargado": original_name,
+            "archivo_generado": output_name,
+            "resultado_url": f"/api/outputs/{output_name}",
             "cantidad_casos": len(rows),
         },
     )
     return StreamingResponse(
         iter([excel_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f"attachment; filename={output_name}"}
     )
 
 # === 4) FEEDBACK ===

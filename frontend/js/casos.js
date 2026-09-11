@@ -1,4 +1,4 @@
-import { postFile } from './api.js';
+import { postFile } from './api.js?v=20260910-1';
 import { saveFileForTransfer, consumeTransferredFile, setFileInput } from './transfer.js';
 
 const form = document.getElementById('form');
