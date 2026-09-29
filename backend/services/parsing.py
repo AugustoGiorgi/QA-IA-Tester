@@ -1,5 +1,7 @@
 from typing import List, Dict
 from docx import Document
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 
 
 def docx_to_text(path: str) -> str:
@@ -10,17 +12,18 @@ def docx_to_text(path: str) -> str:
     doc = Document(path)
     texts = []
 
-    # Procesar párrafos
-    for p in doc.paragraphs:
-        if p.text and p.text.strip():
-            texts.append(p.text.strip())
-
-    # Procesar tablas (como líneas legibles)
-    for tbl in doc.tables:
-        for row in tbl.rows:
-            row_txt = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-            if row_txt:
-                texts.append(" | ".join(row_txt))
+    # Keep each table beside its section, preserving the meaning of adjacent rules.
+    for element in doc.element.body.iterchildren():
+        if element.tag.endswith('}p'):
+            paragraph = Paragraph(element, doc)
+            if paragraph.text.strip():
+                texts.append(paragraph.text.strip())
+        elif element.tag.endswith('}tbl'):
+            table = Table(element, doc)
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                if any(cells):
+                    texts.append(" | ".join(cells))
 
     return "\n".join(texts)
 

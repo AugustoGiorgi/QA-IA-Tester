@@ -16,17 +16,15 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: gpt-4o-mini
+        value: gpt-5.4
+      - key: QA_OPENAI_MODEL
+        value: gpt-5.4
+      - key: OPENAI_REASONING_EFFORT
+        value: medium
+      - key: OPENAI_MAX_COMPLETION_TOKENS
+        value: "16000"
       - key: APP_BASE_URL
         sync: false
-      - key: BOOTSTRAP_ADMIN_USER
-        value: lider
-      - key: BOOTSTRAP_ADMIN_PASSWORD
-        sync: false
-      - key: BOOTSTRAP_ADMIN_EMAIL
-        sync: false
-      - key: SESSION_TTL_HOURS
-        value: "8"
       - key: MAX_IMPORT_FILE_MB
         value: "20"
       - key: IMPORT_BATCH_SIZE

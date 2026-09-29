@@ -5,6 +5,7 @@ const form = document.getElementById('form');
 const out = document.getElementById('out');
 const migrate = document.getElementById('migrate');
 const fileInput = document.getElementById('file');
+let generating = false;
 
 // Si llegamos desde otra pantalla con un archivo migrado, precargarlo
 const incoming = consumeTransferredFile();
@@ -18,8 +19,12 @@ if (incoming) {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (generating) return;
   const file = fileInput.files[0];
   if (!file) return alert('Seleccioná un .docx');
+  generating = true;
+  const submit = form.querySelector('button[type="submit"]');
+  if (submit) submit.disabled = true;
   out.textContent = 'Procesando...';
   try {
     const res = await postFile('/api/explain', file);
@@ -32,6 +37,9 @@ form.addEventListener('submit', async (e) => {
     renderMigrate(file);
   } catch (err) {
     out.textContent = 'Error: ' + err.message;
+  } finally {
+    generating = false;
+    if (submit) submit.disabled = false;
   }
 });
 
@@ -39,14 +47,9 @@ function renderMigrate(file) {
   migrate.innerHTML = `
     <div class="title">Usar este archivo en:</div>
     <div class="actions">
-      <button id="goCalidad">Validación de Calidad</button>
       <button id="goCasos">Diseño de Casos de Prueba</button>
     </div>
   `;
-  document.getElementById('goCalidad').onclick = async () => {
-    await saveFileForTransfer(file);
-    location.href = '/app/calidad.html';
-  };
   document.getElementById('goCasos').onclick = async () => {
     await saveFileForTransfer(file);
     location.href = '/app/casos.html';

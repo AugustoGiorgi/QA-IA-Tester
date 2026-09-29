@@ -2,49 +2,24 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>QA Doc Analyzer</title>
   <link rel="stylesheet" href="/app/styles.css" />
-  <link rel="stylesheet" href="/app/dashboard.css?v=20260609-8" />
+  <link rel="stylesheet" href="/app/dashboard.css?v=20260918" />
+  <link rel="stylesheet" href="/app/overview.css?v=20260918" />
 </head>
 <body class="app-shell">
   <aside class="sidebar">
-    <div class="brand">
-      <strong>QA Doc Analyzer</strong>
-      <span id="userBadge" class="small muted"></span>
-    </div>
-    <nav id="sideNav" class="side-nav"></nav>
-    <button id="logoutBtn" type="button" class="sidebar-logout">Salir</button>
+    <div class="brand"><strong>QA Doc Analyzer</strong><span id="userBadge" class="small muted">Espacio compartido</span></div>
+    <nav id="sideNav" class="side-nav" aria-label="Modulos"></nav>
   </aside>
-
   <main class="main-shell">
     <header class="topbar">
-      <div>
-        <h1 id="viewTitle">Inicio</h1>
-        <p id="viewSubtitle" class="small muted">Panel operativo interno</p>
-      </div>
-      <div class="topbar-actions">
-        <button id="mobileMenu" type="button" class="btn-secondary">Menu</button>
-        <div class="profile-menu">
-          <button id="profileButton" type="button" class="profile-button" aria-expanded="false" aria-controls="profileDropdown">
-            <span id="profileInitials" class="profile-avatar"></span>
-            <span class="profile-button-copy">
-              <strong id="profileName"></strong>
-              <small id="profileRole"></small>
-            </span>
-            <span class="profile-chevron">v</span>
-          </button>
-          <div id="profileDropdown" class="profile-dropdown hidden">
-            <button id="changePasswordButton" type="button">Cambiar contrasena</button>
-          </div>
-        </div>
-      </div>
+      <div><h1 id="viewTitle">Inicio</h1><p id="viewSubtitle" class="small muted"></p></div>
+      <div class="topbar-actions"><button id="mobileMenu" type="button" class="btn-secondary" aria-label="Abrir menu">Menu</button></div>
     </header>
     <section id="appView" class="view-host"></section>
   </main>
-
-  <script type="module" src="/app/js/home.js?v=20260727-3"></script>
-  <script type="module" src="/app/js/password-toggle.js?v=20260609-1"></script>
-  <script type="module" src="/app/js/project-chat-widget.js"></script>
+  <script type="module" src="/app/js/home.js?v=20260918"></script>
 </body>
 </html>

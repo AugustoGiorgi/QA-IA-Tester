@@ -2,8 +2,7 @@
 export const API_BASE = window.location.origin;
 
 export function authHeaders(extra = {}) {
-  const token = localStorage.getItem("qa_auth_token") || "";
-  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+  return { ...extra };
 }
 
 /**

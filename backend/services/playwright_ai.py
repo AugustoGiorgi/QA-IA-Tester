@@ -18,7 +18,8 @@ from pydantic import BaseModel
 from pymongo import ASCENDING, DESCENDING
 
 from services.activity import record_activity
-from services.ai import MODEL, client
+from services.ai import chat_completion
+from starlette.concurrency import run_in_threadpool
 from services.auth import _db, current_user
 from services.files import safe_filename
 
@@ -378,8 +379,7 @@ def _generate_with_vision(payload: Dict[str, str], frames: List[Path]) -> Option
         )
         content: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
         content.extend(_image_part(frame) for frame in frames)
-        resp = client.chat.completions.create(
-            model=MODEL,
+        resp = chat_completion(
             messages=[
                 {
                     "role": "system",
@@ -391,7 +391,7 @@ def _generate_with_vision(payload: Dict[str, str], frames: List[Path]) -> Option
                 {"role": "user", "content": content},
             ],
             temperature=0.15,
-            max_tokens=12000,
+            max_tokens=20000,
             response_format={"type": "json_object"},
         )
         data = _parse_ai_json(resp.choices[0].message.content or "")
@@ -1132,8 +1132,7 @@ def _repair_generated(
         "mandatory_fixes": findings["critical"],
         "additional_warnings": findings["warnings"],
     }
-    response = client.chat.completions.create(
-        model=MODEL,
+    response = chat_completion(
         messages=[
             {
                 "role": "system",
@@ -1152,8 +1151,7 @@ def _repair_generated(
             {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
         ],
         temperature=0,
-        max_tokens=16000,
-        top_p=1,
+        max_tokens=24000,
         response_format={"type": "json_object"},
     )
     repaired = _parse_ai_json(response.choices[0].message.content or "")
@@ -1235,12 +1233,10 @@ def _reviewed_result(
 
 def _audit_generated(payload: Dict[str, str], generated: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        response = client.chat.completions.create(
-            model=MODEL,
+        response = chat_completion(
             messages=_audit_prompt(payload, generated),
             temperature=0,
-            max_tokens=14000,
-            top_p=1,
+            max_tokens=22000,
             response_format={"type": "json_object"},
         )
         audited = _parse_ai_json(response.choices[0].message.content or "")
@@ -1325,12 +1321,10 @@ def _generate_with_ai(payload: Dict[str, str], video_path: Optional[Path] = None
         )
         return _reviewed_result(payload, fallback)
     try:
-        response = client.chat.completions.create(
-            model=MODEL,
+        response = chat_completion(
             messages=_build_prompt(payload),
             temperature=0.1,
-            max_tokens=10000,
-            top_p=1,
+            max_tokens=18000,
             response_format={"type": "json_object"},
         )
         raw = response.choices[0].message.content or ""
@@ -1426,7 +1420,7 @@ async def generate_playwright(
             "Las observaciones, codegen y selectores aportados complementan los elementos no visibles."
         ),
     }
-    generated = _generate_with_ai(payload, _video_path(video_name))
+    generated = await run_in_threadpool(_generate_with_ai, payload, _video_path(video_name))
     now = datetime.utcnow()
     doc = {
         **payload,
@@ -1496,7 +1490,8 @@ async def audit_generated(record_id: str, user: Dict[str, Any] = Depends(current
             "description", "observations", "codegen", "selector_context", "video_note",
         )
     }
-    audited = _audit_generated(
+    audited = await run_in_threadpool(
+        _audit_generated,
         payload,
         {
             "generated_code": current.get("generated_code", ""),

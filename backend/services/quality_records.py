@@ -39,6 +39,7 @@ COLUMNS = [
 class QualityRecordIn(BaseModel):
     id_req: str
     requirement_name: str
+    qa_responsible: str
     design_time: Optional[float] = None
     design_time_seconds: Optional[int] = None
     generated_cases: int
@@ -133,7 +134,7 @@ def _payload(payload: QualityRecordIn, user: Dict[str, Any]) -> Dict[str, Any]:
     data = {
         "id_req": _clean_text(payload.id_req, "ID REQ"),
         "requirement_name": _clean_text(payload.requirement_name, "Nombre Requerimiento"),
-        "qa_responsible": user["username"],
+        "qa_responsible": _clean_text(payload.qa_responsible, "Responsable QA", 120),
         "design_time_seconds": design_time_seconds,
         "design_time": round(design_time_seconds / 60, 2),
         "generated_cases": generated,
@@ -147,6 +148,8 @@ def _payload(payload: QualityRecordIn, user: Dict[str, Any]) -> Dict[str, Any]:
 
 def _public(doc: Dict[str, Any]) -> Dict[str, Any]:
     doc = dict(doc)
+    responsible = str(doc.get("qa_responsible") or "")
+    doc["qa_responsible_display"] = responsible.replace(".", " ").replace("_", " ").title() if "." in responsible or "_" in responsible else responsible
     if "design_time_seconds" not in doc:
         doc["design_time_seconds"] = round(float(doc.get("design_time") or 0) * 60)
     if "post_qa_review_quality_percent" not in doc and "post_review_quality_percent" in doc:
@@ -176,7 +179,7 @@ async def _ensure_indexes() -> None:
 async def list_records(user: Dict[str, Any] = Depends(current_user)):
     _require_allowed(user)
     await _ensure_indexes()
-    docs = await _db()[COLLECTION].find({}).sort("created_at", DESCENDING).to_list(1000)
+    docs = await _db()[COLLECTION].find({}).sort("created_at", DESCENDING).to_list(None)
     return {"records": [_public(doc) for doc in docs]}
 
 
@@ -207,7 +210,7 @@ async def update_record(record_id: str, payload: QualityRecordIn, user: Dict[str
     current = await db[COLLECTION].find_one({"_id": _oid(record_id)})
     if not current:
         raise HTTPException(status_code=404, detail="Registro no encontrado.")
-    if current.get("created_by") != user["username"]:
+    if not user.get("shared") and current.get("created_by") != user["username"]:
         raise HTTPException(status_code=403, detail="Solo podes editar registros creados por vos.")
     update = {**_payload(payload, user), "updated_at": _now()}
     await db[COLLECTION].update_one({"_id": current["_id"]}, {"$set": update})
@@ -224,7 +227,7 @@ async def delete_record(record_id: str, user: Dict[str, Any] = Depends(current_u
     current = await db[COLLECTION].find_one({"_id": _oid(record_id)})
     if not current:
         raise HTTPException(status_code=404, detail="Registro no encontrado.")
-    if current.get("created_by") != user["username"]:
+    if not user.get("shared") and current.get("created_by") != user["username"]:
         raise HTTPException(status_code=403, detail="Solo podes eliminar registros creados por vos.")
     await db[COLLECTION].delete_one({"_id": current["_id"]})
     return {"ok": True}
@@ -234,7 +237,7 @@ async def delete_record(record_id: str, user: Dict[str, Any] = Depends(current_u
 async def export_records(user: Dict[str, Any] = Depends(current_user)):
     _require_allowed(user)
     await _ensure_indexes()
-    docs = await _db()[COLLECTION].find({}).sort("created_at", DESCENDING).to_list(5000)
+    docs = await _db()[COLLECTION].find({}).sort("created_at", DESCENDING).to_list(None)
 
     wb = Workbook()
     ws = wb.active
@@ -250,6 +253,8 @@ async def export_records(user: Dict[str, Any] = Depends(current_user)):
         for key, _ in COLUMNS:
             if key == "design_time":
                 values.append(public_doc.get("design_time_seconds", 0) / 86400)
+            elif key == "qa_responsible":
+                values.append(public_doc.get("qa_responsible_display", ""))
             else:
                 values.append(public_doc.get(key, ""))
         ws.append(values)

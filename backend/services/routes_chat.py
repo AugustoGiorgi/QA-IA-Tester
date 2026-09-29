@@ -1,5 +1,6 @@
 # services/routes_chat.py
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from starlette.concurrency import run_in_threadpool
 from pathlib import Path
 from uuid import uuid4
 from typing import Dict, Any
@@ -7,7 +8,7 @@ import json
 import re
 
 from services.parsing import docx_to_text
-from services.ai import complete
+from services.ai import AIResponseError, complete
 
 router = APIRouter()
 
@@ -98,7 +99,9 @@ async def chat_ask(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     try:
-        answer = complete([system, user], temperature=0.1)
+        answer = await run_in_threadpool(complete, [system, user], temperature=0.1)
+    except AIResponseError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al consultar el modelo: {e}")
 

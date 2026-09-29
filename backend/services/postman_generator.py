@@ -1022,7 +1022,7 @@ async def _get_draft(draft_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     doc = await _db()[COLLECTION].find_one({"_id": _oid(draft_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Draft no encontrado.")
-    if doc.get("created_by") != user.get("username"):
+    if not user.get("shared") and doc.get("created_by") != user.get("username"):
         raise HTTPException(status_code=403, detail="No podes acceder a este draft.")
     return doc
 
@@ -1081,7 +1081,7 @@ async def analyze_postman_sources(
 @router.get("/drafts")
 async def list_drafts(user: Dict[str, Any] = Depends(current_user)):
     _require_qa(user)
-    query = {"created_by": user["username"]}
+    query = {} if user.get("shared") else {"created_by": user["username"]}
     docs = await _db()[COLLECTION].find(query).sort("created_at", DESCENDING).to_list(100)
     return {"drafts": [_public(doc) for doc in docs]}
 

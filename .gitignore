@@ -12,6 +12,7 @@ backend/data/sessions/
 backend/data/sessions_coach/
 backend/data/task_attachments/
 backend/data/playwright_videos/
+backend/data/preview.*.log
 backend/data/*.docx
 backend/qa_doc_analyzer.db
 backend/.env

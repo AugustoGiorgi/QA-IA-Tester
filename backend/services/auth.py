@@ -136,19 +136,8 @@ def _public_user(user: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="No autenticado.")
-    token = authorization.split(" ", 1)[1].strip()
-    session = _sessions.get(token)
-    if not session or session["expires_at"] < datetime.utcnow():
-        _sessions.pop(token, None)
-        raise HTTPException(status_code=401, detail="Sesión expirada.")
-
-    await _ensure_users_collection()
-    user = await _db()["Users"].find_one({"username": session["username"], "active": True})
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuario inactivo o inexistente.")
-    return user
+    # Compatibility context for QA modules; no account or session is persisted.
+    return {"username": "shared", "role": "qa", "full_name": "Equipo QA", "shared": True}
 
 
 def require_roles(*roles: str) -> Callable:

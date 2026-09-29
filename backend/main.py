@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import List, Dict, Optional
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
-from fastapi.responses import PlainTextResponse, StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
@@ -20,15 +21,13 @@ from schemas import FeedbackOut, GenerateFunctionalIn
 # Servicios
 from services.parsing import docx_to_text
 from services.testcases import generate_testcases_markdown
-from services.ai import MAX_FEEDBACK_SNIPPETS, build_messages, complete
+from services.ai import AIResponseError, MAX_FEEDBACK_SNIPPETS, build_messages, complete
 from services.generator import generate_functional_json, functional_json_to_docx
 from services.project_chat import chat_proyectos
 from services.files import safe_filename, safe_stem, save_upload
 from services.markdown_table import first_table
-from services.auth import router as auth_router, require_roles
-from services.activity import router as activity_router
+from services.auth import require_roles
 from services.activity import record_activity
-from services.internal_tasks import router as internal_tasks_router
 from services.quality_records import router as quality_records_router
 
 # Evaluador determinístico + reporter
@@ -41,11 +40,8 @@ from services.playwright_ai import router as playwright_ai_router
 from services.postman_generator import router as postman_generator_router
 
 # ⬇️ Chat de recomendaciones (calidad)
-from services.routes_quality_chat import router as reco_chat_router
 
 # ⬇️ NUEVO: Coach de Documento Funcional (ida y vuelta)
-from services.routes_functional_coach import router as functional_coach_router
-from services.data_import import router as data_import_router
 
 # Utilidad de Excel (usa plantilla)
 from utils.excel import to_excel_bytes
@@ -56,6 +52,11 @@ logger = logging.getLogger("qa_doc_analyzer")
 # --- App FASTAPI ---
 app = FastAPI(title="QA Doc Analyzer API")
 
+
+@app.exception_handler(AIResponseError)
+async def incomplete_ai_response(request, exc):
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
+
 # ⚠️ Desactivar redirects automáticos de barra final/inicial
 try:
     app.router.redirect_slashes = False
@@ -63,9 +64,6 @@ except Exception:
     pass
 
 # Auth
-app.include_router(auth_router)
-app.include_router(activity_router)
-app.include_router(internal_tasks_router)
 app.include_router(quality_records_router)
 
 # Router de Chat contextual (repreguntas sobre el DF)
@@ -73,11 +71,8 @@ from services.routes_chat import router as chat_router
 app.include_router(chat_router, dependencies=[Depends(require_roles("qa", "lider"))])
 
 # Montar router de chat de recomendaciones
-app.include_router(reco_chat_router, dependencies=[Depends(require_roles("funcional", "lider"))])
 
 # Montar router NUEVO del coach funcional
-app.include_router(functional_coach_router, dependencies=[Depends(require_roles("funcional"))])
-app.include_router(data_import_router, dependencies=[Depends(require_roles("lider"))])
 
 app.add_middleware(
     CORSMiddleware,
@@ -98,6 +93,15 @@ DATA_DIR.mkdir(exist_ok=True)
 # Montar frontend si existe
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 if FRONTEND_DIR.exists():
+    @app.get("/app/{legacy_page}", include_in_schema=False)
+    async def legacy_page(legacy_page: str):
+        if legacy_page in {"login.html", "usuarios.html", "calidad.html", "chat-funcional.html", "importacion.html"}:
+            return RedirectResponse("/app/index.html")
+        target = FRONTEND_DIR / legacy_page
+        if not target.is_file() or target.parent != FRONTEND_DIR:
+            raise HTTPException(status_code=404)
+        return FileResponse(target)
+
     app.mount("/app", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 
     @app.get("/")
@@ -175,7 +179,7 @@ async def explain(
 
     text = docx_to_text(str(tmp_path))
     msgs = build_messages(EXPLAIN_PROMPT_STORY, text, get_recent_feedback_snippets(db))
-    explanation = complete(msgs)
+    explanation = await run_in_threadpool(complete, msgs)
 
     explanation = re.sub(r"\|", "", explanation)          # elimina tablas tipo |
     explanation = re.sub(r"-{2,}", "", explanation)       # elimina ----
@@ -323,7 +327,9 @@ async def testcases(
         raise HTTPException(status_code=400, detail="No se pudo extraer texto suficiente del DOCX.")
 
     try:
-        table_md = generate_testcases_markdown(text, get_recent_feedback_snippets(db))
+        table_md = await run_in_threadpool(generate_testcases_markdown, text, get_recent_feedback_snippets(db))
+    except AIResponseError:
+        raise
     except Exception as exc:
         logger.error("Fallo generación IA de casos: %s\n%s", exc, traceback.format_exc())
         raise HTTPException(

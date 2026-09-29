@@ -62,6 +62,8 @@ async def record_activity(
     detail: str = "",
     metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
+    if user.get("shared"):
+        return
     try:
         await _ensure_indexes()
         await _db()[COLLECTION].insert_one(

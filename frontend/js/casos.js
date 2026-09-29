@@ -5,6 +5,7 @@ const form = document.getElementById('form');
 const result = document.getElementById('result');
 const migrate = document.getElementById('migrate');
 const fileInput = document.getElementById('file');
+let generating = false;
 
 // Si llegamos desde otra pantalla con un archivo migrado, precargarlo
 const incoming = consumeTransferredFile();
@@ -18,9 +19,13 @@ if (incoming) {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  result.textContent = 'Generando Excel...';
+  if (generating) return;
   const file = fileInput.files[0];
   if (!file) return alert('Seleccioná un .docx');
+  generating = true;
+  const submit = form.querySelector('button[type="submit"]');
+  if (submit) submit.disabled = true;
+  result.textContent = 'Generando Excel...';
   try {
     const res = await postFile('/api/testcases', file);
     const blob = await res.blob();
@@ -35,6 +40,9 @@ form.addEventListener('submit', async (e) => {
     renderMigrate(file);
   } catch (err) {
     result.textContent = 'Error: ' + err.message;
+  } finally {
+    generating = false;
+    if (submit) submit.disabled = false;
   }
 });
 
@@ -43,15 +51,10 @@ function renderMigrate(file) {
     <div class="title">Usar este archivo en:</div>
     <div class="actions">
       <button id="goEnt">Entendimiento de Documento</button>
-      <button id="goCalidad">Validación de Calidad</button>
     </div>
   `;
   document.getElementById('goEnt').onclick = async () => {
     await saveFileForTransfer(file);
     location.href = '/app/entendimiento.html';
-  };
-  document.getElementById('goCalidad').onclick = async () => {
-    await saveFileForTransfer(file);
-    location.href = '/app/calidad.html';
   };
 }
