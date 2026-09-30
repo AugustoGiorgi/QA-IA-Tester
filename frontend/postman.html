@@ -376,12 +376,33 @@
       color: #bbf7d0;
     }
 
+    .pm-review { margin: 24px 0; padding-top: 18px; border-top: 1px solid var(--pm-line); }
+    .pm-review h3 { margin: 18px 0 8px; color: #fff; }
+    .pm-case-list { display: grid; gap: 10px; max-height: 620px; overflow: auto; }
+    .pm-review-case { display: grid; gap: 9px; padding: 14px; border: 1px solid var(--pm-line); border-radius: 8px; background: rgba(8,17,31,.48); }
+    .pm-review-case label, .pm-variable-list label { display: grid; gap: 5px; color: #cbd5e1; font-size: .84rem; font-weight: 700; }
+    .pm-review-case .pm-include { display: flex; align-items: center; gap: 8px; }
+    .pm-review-case input[type="checkbox"] { width: 16px; height: 16px; accent-color: #2563eb; }
+    .pm-review-case select, .pm-review-case textarea, .pm-variable-list input { width: 100%; padding: 10px; border: 1px solid var(--pm-line); border-radius: 6px; background: #0b1528; color: #e2e8f0; }
+    .pm-variable-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .pm-assertion-grid { display:grid; grid-template-columns:minmax(100px,.35fr) minmax(0,1fr); gap:9px; }
+    .pm-review-warnings { margin-top: 16px; color: #fcd34d; }
+    .pm-review-warnings summary { cursor: pointer; font-weight: 700; }
+    .pm-library { margin-top:18px; }
+    .pm-draft-list { display:grid; gap:8px; margin-top:12px; }
+    .pm-draft-item { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--pm-line); border-radius:7px; background:rgba(8,17,31,.48); }
+    .pm-draft-item button { width:auto; min-height:36px; padding:0 12px!important; }
+    .pm-secondary { min-height: 42px; padding: 0 15px; border: 1px solid var(--pm-line); border-radius: 7px; background: #13213b; color: #dbeafe; font-weight: 700; cursor: pointer; }
+
     @media (max-width: 980px) {
       .postman-grid,
       .pm-summary,
       .pm-case-grid {
         grid-template-columns: 1fr;
       }
+
+      .pm-variable-list { grid-template-columns: 1fr; }
+      .pm-assertion-grid { grid-template-columns: 1fr; }
 
       .postman-form {
         position: static;
@@ -447,8 +468,13 @@
         </div>
       </section>
     </section>
+
+    <section class="postman-panel pm-library">
+      <h2>Proyectos guardados</h2>
+      <div id="pmDraftList" class="pm-draft-list"><span class="pm-help">Cargando borradores...</span></div>
+    </section>
   </main>
 
-  <script type="module" src="/app/js/postman.js?v=20260727-3"></script>
+  <script type="module" src="/app/js/postman.js?v=20260930-1"></script>
 </body>
 </html>

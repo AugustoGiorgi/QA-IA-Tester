@@ -531,6 +531,10 @@ def _extract_variables(sources: List[Dict[str, Any]], endpoints: List[Dict[str, 
             if re.search(r"(?i)(authorization|token|api[-_]?key|secret|cookie)", header.get("key", "")):
                 add_var(header.get("key", "secret"), "environment", endpoint["source_refs"][0]["source"], "", True, "Header sensible")
                 header["value"] = "{{" + _safe_key(header.get("key", "secret")) + "}}"
+        for parameter in endpoint.get("path_params", []) + endpoint.get("query_params", []):
+            key = str(parameter.get("key") or "").strip()
+            if key:
+                add_var(key, "collection", endpoint["source_refs"][0]["source"], str(parameter.get("value") or ""), False, "Parametro de request")
 
     for source in sources:
         text = source.get("text", "")
@@ -542,7 +546,6 @@ def _extract_variables(sources: List[Dict[str, Any]], endpoints: List[Dict[str, 
                 "type": "possible_secret",
                 "message": "Se detecto un posible secreto. No se exporta su valor por defecto.",
                 "source": source["name"],
-                "sample": secret.group(0)[:80],
             })
     return list(variables.values()), warnings
 
@@ -781,6 +784,28 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
     if generated_cases:
         test_cases.extend(generated_cases)
         associations = _associate(test_cases, endpoints)
+    endpoint_by_id = {endpoint.get("id"): endpoint for endpoint in endpoints}
+    case_by_id = {case.get("id"): case for case in test_cases}
+    for association in associations:
+        case = case_by_id.get(association.get("case_id"), {})
+        endpoint = endpoint_by_id.get(association.get("endpoint_id"), {})
+        body_raw = str((endpoint.get("body") or {}).get("raw") or "")
+        if case.get("generated") and (
+            "error" in str(case.get("name", "")).lower()
+            or re.search(r"(?i)todo|completar", body_raw)
+        ):
+            association["included"] = False
+    endpoint_by_id = {endpoint.get("id"): endpoint for endpoint in endpoints}
+    case_by_id = {case.get("id"): case for case in test_cases}
+    for association in associations:
+        case = case_by_id.get(association.get("case_id"), {})
+        endpoint = endpoint_by_id.get(association.get("endpoint_id"), {})
+        body_raw = str((endpoint.get("body") or {}).get("raw") or "")
+        if case.get("generated") and (
+            "error" in str(case.get("name", "")).lower()
+            or re.search(r"(?i)todo|completar", body_raw)
+        ):
+            association["included"] = False
     endpoint_ids_with_case = {a["endpoint_id"] for a in associations if a.get("endpoint_id")}
     for endpoint in endpoints:
         if endpoint["id"] not in endpoint_ids_with_case:
@@ -817,11 +842,12 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
 def _postman_url(endpoint: Dict[str, Any]) -> Dict[str, Any]:
     base = endpoint.get("base_url", "")
     path = endpoint.get("path", "")
+    path = re.sub(r"\{([A-Za-z0-9_.-]+)\}", lambda match: "{{" + _safe_key(match.group(1)) + "}}", path)
     raw = (base.rstrip("/") + "/" + path.lstrip("/")).strip("/") if base else path
     if base.startswith("{{"):
         raw = base.rstrip("/") + "/" + path.lstrip("/")
     query = [
-        {"key": item.get("key", ""), "value": item.get("value", ""), "description": item.get("description", "")}
+        {"key": item.get("key", ""), "value": item.get("value") or "{{" + _safe_key(str(item.get("key") or "param")) + "}}", "description": item.get("description", "")}
         for item in endpoint.get("query_params", [])
     ]
     return {"raw": raw or "{{baseUrl}}/", "host": [base or "{{baseUrl}}"], "path": [part for part in path.strip("/").split("/") if part], "query": query}
@@ -844,72 +870,110 @@ def _postman_body(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"mode": "raw", "raw": str(body.get("raw", ""))}
 
 
-def _tests_for_endpoint(endpoint: Dict[str, Any], associations: List[Dict[str, Any]], cases: List[Dict[str, Any]]) -> str:
-    related = [a for a in associations if a.get("endpoint_id") == endpoint.get("id")]
+def _tests_for_endpoint(endpoint: Dict[str, Any], case: Optional[Dict[str, Any]] = None) -> str:
     statuses = {
         str(resp.get("status"))
         for resp in endpoint.get("responses", [])
         if str(resp.get("status", "")).isdigit()
     }
-    lines = [
-        "pm.test('La respuesta tiene un status documentado o aceptable', function () {",
-    ]
-    if statuses:
-        lines.append(f"  pm.expect([{', '.join(sorted(statuses))}]).to.include(pm.response.code);")
-    else:
-        lines.append("  pm.expect(pm.response.code).to.be.within(100, 599);")
-    lines.append("});")
-    if endpoint.get("content_type"):
+    lines: List[str] = []
+    case_status = str((case or {}).get("expected_status") or "").strip()
+    if not case_status:
+        result_match = re.search(r"(?i)(?:status(?:\s+HTTP)?|HTTP|respuesta|response)[^0-9]{0,12}([1-5][0-9]{2})|(?:esperad[oa]|expected)[^0-9]{0,20}([1-5][0-9]{2})", str((case or {}).get("expected_result") or ""))
+        case_status = next((value for value in result_match.groups() if value), "") if result_match else ""
+    if case_status:
         lines.extend([
-            "",
-            "pm.test('Content-Type coherente si viene informado', function () {",
-            "  const contentType = pm.response.headers.get('Content-Type') || '';",
-            f"  pm.expect(contentType.toLowerCase()).to.include('{endpoint['content_type'].split(';')[0].lower()}');",
+            "pm.test('La respuesta tiene el status esperado para este caso', function () {",
+            f"  pm.response.to.have.status({case_status});",
             "});",
         ])
-    if related:
-        case_names = [case.get("name") for case in cases if case.get("id") in {a["case_id"] for a in related}]
-        lines.extend(["", f"console.log('Casos relacionados: {json.dumps(case_names, ensure_ascii=False)}');"])
-    lines.extend(["", "// TODO_ASSERTION: Agregar validaciones especificas confirmadas por QA."])
+    elif statuses and not (case and case.get("generated") and "error" in str(case.get("name", "")).lower()):
+        lines.extend([
+            "pm.test('La respuesta coincide con un status documentado', function () {",
+            f"  pm.expect([{', '.join(sorted(statuses))}]).to.include(pm.response.code);",
+            "});",
+        ])
+    elif case:
+        lines.append("// Pendiente QA: traducir el resultado esperado a una asercion de status/body confirmada.")
+    expected_response = (case or {}).get("expected_response")
+    if expected_response:
+        try:
+            expected_json = json.loads(expected_response) if isinstance(expected_response, str) else expected_response
+            lines.extend([
+                "pm.test('El body contiene los datos esperados', function () {",
+                f"  pm.expect(pm.response.json()).to.deep.include({json.dumps(expected_json, ensure_ascii=False)});",
+                "});",
+            ])
+        except (TypeError, ValueError):
+            lines.append("// Pendiente QA: la respuesta esperada no contiene JSON valido.")
+    if case:
+        lines.extend(["", f"// Caso QA: {str(case.get('case_id') or case.get('name') or '').replace(chr(10), ' ')}"])
+    if not lines:
+        lines.extend(["", "// Pendiente QA: completar el resultado esperado antes de considerar este caso validado."])
     return "\n".join(lines)
 
 
 def build_collection(model: Dict[str, Any]) -> Dict[str, Any]:
     associations = model.get("associations", [])
     cases = model.get("test_cases", [])
-    items: List[Dict[str, Any]] = []
+    cases_by_endpoint: Dict[str, List[Dict[str, Any]]] = {}
+    associated_endpoint_ids = set()
+    for association in associations:
+        case = next((item for item in cases if item.get("id") == association.get("case_id")), None)
+        endpoint_id = association.get("endpoint_id")
+        if case and endpoint_id:
+            associated_endpoint_ids.add(endpoint_id)
+        if case and endpoint_id and association.get("included", True):
+            cases_by_endpoint.setdefault(endpoint_id, []).append(case)
+    folders: Dict[str, List[Dict[str, Any]]] = {}
     for endpoint in model.get("endpoints", []):
         if endpoint.get("status") in {"disabled", "blocked"}:
             continue
-        request: Dict[str, Any] = {
-            "method": endpoint.get("method", "GET"),
-            "header": endpoint.get("headers", []),
-            "url": _postman_url(endpoint),
-            "description": endpoint.get("description", ""),
-        }
-        body = _postman_body(endpoint.get("body") or {})
-        if body:
-            request["body"] = body
-        auth = endpoint.get("auth") or {"type": "inherit"}
-        if auth.get("type") and auth.get("type") != "inherit":
-            request["auth"] = auth
-        item = {
-            "name": endpoint.get("name") or f"{endpoint.get('method')} {endpoint.get('path')}",
-            "request": request,
-            "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": _tests_for_endpoint(endpoint, associations, cases).splitlines()}}],
-        }
-        items.append(item)
+        endpoint_cases = cases_by_endpoint.get(endpoint.get("id"), [])
+        if endpoint.get("id") in associated_endpoint_ids and not endpoint_cases:
+            continue
+        # Keep an explicit draft request when the source has no associated case.
+        request_cases = endpoint_cases or [None]
+        for case in request_cases:
+            request: Dict[str, Any] = {
+                "method": endpoint.get("method", "GET"),
+                "header": endpoint.get("headers", []),
+                "url": _postman_url(endpoint),
+                "description": "\n\n".join(filter(None, [endpoint.get("description", ""), (case or {}).get("description", ""), (case or {}).get("expected_result", "")])),
+            }
+            case_body = (case or {}).get("request_body")
+            body_source = endpoint.get("body") or {}
+            if case_body:
+                try:
+                    parsed_body = json.loads(case_body) if isinstance(case_body, str) else case_body
+                    body_source = {"mode": "raw", "raw": json.dumps(parsed_body, ensure_ascii=False, indent=2), "content_type": "application/json"}
+                except (TypeError, ValueError):
+                    body_source = {"mode": "raw", "raw": str(case_body), "content_type": "application/json"}
+            body = _postman_body(body_source)
+            if body:
+                request["body"] = body
+            auth = endpoint.get("auth") or {"type": "inherit"}
+            if auth.get("type") and auth.get("type") != "inherit":
+                request["auth"] = auth
+            endpoint_name = endpoint.get("name") or f"{endpoint.get('method')} {endpoint.get('path')}"
+            case_name = (case or {}).get("name") or "Pendiente: asociar caso y expectativa"
+            item = {
+                "name": f"{case_name} [{endpoint.get('method')} {endpoint.get('path')}]" if case else f"Pendiente QA - {endpoint_name}",
+                "request": request,
+                "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": _tests_for_endpoint(endpoint, case).splitlines()}}],
+            }
+            folder = endpoint.get("folder") or "Casos de prueba"
+            folders.setdefault(folder, []).append(item)
     return {
         "info": {
-            "name": "Coleccion QA generada",
+            "name": model.get("project_name") or "Coleccion QA generada",
             "schema": POSTMAN_SCHEMA,
             "description": "Generada por QA Doc Analyzer desde documentacion, casos y fuentes adjuntas.",
         },
-        "item": [{"name": model.get("folders", ["Endpoints"])[0] or "Endpoints", "item": items}],
+        "item": [{"name": name, "item": items} for name, items in folders.items()],
         "variable": [
-            {"key": var["key"], "value": var.get("value", ""), "type": "string"}
+            {"key": var["key"], "value": "" if var.get("sensitive") else var.get("value", ""), "type": "string"}
             for var in model.get("variables", [])
-            if var.get("scope") == "collection"
         ],
     }
 
@@ -1010,6 +1074,12 @@ def validate_model(model: Dict[str, Any]) -> Dict[str, Any]:
 def _public(doc: Dict[str, Any]) -> Dict[str, Any]:
     public = dict(doc)
     public["id"] = str(public.pop("_id"))
+    model = dict(public.get("model") or {})
+    model["variables"] = [
+        {**variable, "value": ""} if variable.get("sensitive") else variable
+        for variable in model.get("variables", [])
+    ]
+    public["model"] = model
     return public
 
 
@@ -1045,6 +1115,7 @@ async def analyze_postman_sources(
     if not sources and not manual_text.strip():
         raise HTTPException(status_code=400, detail="Carga al menos un archivo o texto.")
     model = build_intermediate_model(sources, manual_text)
+    model["project_name"] = _clean(project_name, 180) or "Proyecto API"
     if case_source:
         model["cases_source"] = {
             "name": case_source["name"],
@@ -1099,6 +1170,7 @@ async def update_draft(draft_id: str, payload: DraftUpdate, user: Dict[str, Any]
     model = dict(doc.get("model") or {})
     update_data = payload.model_dump(exclude_none=True)
     model.update(update_data)
+    model["project_name"] = doc.get("project_name") or model.get("project_name") or "Proyecto API"
     model["validation"] = validate_model(model)
     await _db()[COLLECTION].update_one({"_id": doc["_id"]}, {"$set": {"model": model, "updated_at": _now()}})
     doc["model"] = model

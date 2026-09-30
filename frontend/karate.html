@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Karate · QA Doc Analyzer</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+  <style>
+    :root { color-scheme: dark; --k-bg:#0b1220; --k-panel:#111b2c; --k-field:#08111f; --k-line:#26364f; --k-blue:#2563eb; --k-muted:#91a0b7; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--k-bg); color:#e8eef8; font:14px/1.5 Inter,Segoe UI,Arial,sans-serif; }
+    .k-shell { width:min(1480px,100%); margin:0 auto; padding:26px; }
+    .k-head { display:flex; justify-content:space-between; align-items:end; gap:16px; padding-bottom:18px; border-bottom:1px solid var(--k-line); }
+    h1 { margin:0; font-size:28px; } h2 { margin:0; font-size:17px; } h3 { margin:8px 0; font-size:15px; }
+    .k-muted { color:var(--k-muted); }
+    .k-grid { display:grid; grid-template-columns:minmax(320px,.76fr) minmax(480px,1.24fr); gap:18px; margin-top:20px; align-items:start; }
+    .k-panel { min-width:0; padding:20px; border:1px solid var(--k-line); border-radius:8px; background:var(--k-panel); }
+    .k-form { display:grid; gap:15px; }
+    .k-form label,.k-case label,.k-var-list label { display:grid; gap:6px; color:#d7e1f0; font-weight:700; }
+    .k-form input,.k-form textarea,.k-case select,.k-case textarea,.k-var-list input { width:100%; min-height:42px; padding:10px 12px; border:1px solid var(--k-line); border-radius:6px; background:var(--k-field); color:#eef4ff; font:inherit; }
+    .k-form textarea,.k-case textarea { min-height:90px; resize:vertical; }
+    .k-drop { display:grid; gap:6px; padding:18px; border:1px dashed #3971d5; border-radius:8px; background:rgba(37,99,235,.08); cursor:pointer; }
+    .k-drop input { border:0; min-height:auto; padding:8px 0 0; background:transparent; }
+    .k-btn { min-height:42px; padding:0 16px; border:1px solid #3678f5; border-radius:7px; background:var(--k-blue); color:white; font-weight:800; cursor:pointer; }
+    .k-btn:disabled { opacity:.55; cursor:wait; }
+    .k-secondary { border-color:var(--k-line); background:#15233b; }
+    .k-status { min-height:22px; color:#fca5a5; }
+    .k-status.ok { color:#86efac; }
+    .k-empty { display:grid; min-height:280px; place-items:center; text-align:center; color:var(--k-muted); }
+    .k-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:16px 0; }
+    .k-metric { padding:12px; border:1px solid var(--k-line); border-radius:7px; background:#0b1526; }
+    .k-metric span,.k-metric strong { display:block; } .k-metric span { color:var(--k-muted); font-size:12px; } .k-metric strong { margin-top:4px; font-size:22px; }
+    .k-state { margin:14px 0; padding:12px; border-left:3px solid #f59e0b; background:rgba(245,158,11,.08); color:#fde68a; }
+    .k-case-list { display:grid; gap:10px; max-height:620px; overflow:auto; }
+    .k-case { display:grid; gap:10px; padding:14px; border:1px solid var(--k-line); border-radius:7px; background:#0b1526; }
+    .k-case p { margin:0; color:var(--k-muted); white-space:pre-wrap; }
+    .k-inline { display:flex; align-items:center; gap:8px; }
+    .k-inline input { width:16px; height:16px; accent-color:var(--k-blue); }
+    .k-var-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px; }
+    .k-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
+    .k-library { margin-top:18px; }
+    .k-drafts { display:grid; gap:8px; margin-top:12px; }
+    .k-draft { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--k-line); border-radius:7px; background:#0b1526; }
+    .k-library { margin-top:18px; }
+    .k-drafts { display:grid; gap:8px; margin-top:12px; }
+    .k-draft { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--k-line); border-radius:7px; background:#0b1526; }
+    .k-warnings { margin-top:16px; color:#fcd34d; }
+    @media(max-width:900px) { .k-shell { padding:16px; } .k-grid { grid-template-columns:1fr; } .k-var-list,.k-metrics { grid-template-columns:1fr; } .k-head { align-items:start; flex-direction:column; } }
+  </style>
+</head>
+<body>
+  <main class="k-shell">
+    <header class="k-head"><div><h1>Karate</h1><span class="k-muted">Generador de automatizaciones API</span></div></header>
+    <div class="k-grid">
+      <form id="karateForm" class="k-panel k-form">
+        <label>Nombre del proyecto<input id="kProject" required placeholder="Propuesta Caucion API" /></label>
+        <label class="k-drop"><strong>Documentos de API y collection</strong><span class="k-muted">OpenAPI, Postman, cURL, DOCX, PDF, YAML, JSON o texto</span><input id="kSources" type="file" multiple accept=".json,.yaml,.yml,.md,.txt,.docx,.pdf,.xml,.curl,.http,.csv,.xlsx" /></label>
+        <label class="k-drop"><strong>Excel de casos (opcional)</strong><span class="k-muted">Se compara con los casos detectados en los documentos</span><input id="kCases" type="file" accept=".xlsx,.csv,.txt" /></label>
+        <label>Comentarios y reglas confirmadas<textarea id="kNotes" placeholder="Agrega reglas de negocio, dependencias entre requests o contexto que no figure en los archivos"></textarea></label>
+        <button id="kGenerate" class="k-btn" type="submit">Analizar y preparar proyecto</button>
+        <div id="kStatus" class="k-status" role="status"></div>
+      </form>
+      <section class="k-panel">
+        <div id="kResult" class="k-empty">Carga documentos para analizar los endpoints y preparar los escenarios.</div>
+      </section>
+    </div>
+    <section class="k-panel k-library">
+      <h2>Proyectos guardados</h2>
+      <div id="kDrafts" class="k-drafts"><span class="k-muted">Cargando borradores...</span></div>
+    </section>
+    <section class="k-panel k-library">
+      <h2>Proyectos guardados</h2>
+      <div id="kDrafts" class="k-drafts"><span class="k-muted">Cargando borradores...</span></div>
+    </section>
+  </main>
+  <script type="module" src="/app/js/karate.js?v=20260930-1"></script>
+</body>
+</html>

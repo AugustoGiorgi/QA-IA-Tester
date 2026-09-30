@@ -38,6 +38,7 @@ from services.reporting import build_markdown_report
 from services.playwright_xlsx import router as playwright_xlsx_router
 from services.playwright_ai import router as playwright_ai_router
 from services.postman_generator import router as postman_generator_router
+from services.karate_generator import router as karate_generator_router
 
 # ⬇️ Chat de recomendaciones (calidad)
 
@@ -478,3 +479,4 @@ def ping_playwright_v2():
 app.include_router(playwright_xlsx_router, prefix="/api/playwright", dependencies=[Depends(require_roles("qa"))])
 app.include_router(playwright_ai_router, prefix="/api/playwright")
 app.include_router(postman_generator_router)
+app.include_router(karate_generator_router)

@@ -131,6 +131,14 @@ function switchTab(tab) {
 function setRecord(record) {
   currentRecord = record;
   $('pwCode').value = record?.generated_code || '';
+  const todoValues = [...Object.values(record?.selectors || {}), ...Object.values(record?.test_data || {})].filter(value => /todo|completar|valor-de-prueba/i.test(String(value))).length;
+  const state = $('pwArtifactStatus');
+  if (state) {
+    state.textContent = !record
+      ? 'Aun no hay una generacion.'
+      : `${record.review_status === 'needs_review' ? 'Borrador con revision pendiente' : 'Revision automatica completada'} · ${todoValues} datos/selectores por completar · No ejecutado contra el sistema real.`;
+    state.classList.toggle('ready', Boolean(record) && todoValues === 0 && record.review_status !== 'needs_review');
+  }
   renderVariableEditor('pwSelectors', record?.selectors, 'selector');
   renderVariableEditor('pwData', record?.test_data, 'data');
   $('pwNotes').innerHTML = (record?.ai_notes || []).map(note => `<p>${escapeHtml(note)}</p>`).join('') || '<span class="pw-muted">Sin notas.</span>';
@@ -170,6 +178,7 @@ async function generateAi(event) {
     fd.append('execution_role', $('pwRole').value.trim());
     fd.append('description', mode === 'video' ? $('pwVideoDescription').value.trim() : $('pwDescription').value.trim());
     fd.append('observations', $('pwObservations').value.trim());
+    fd.append('process_context', mode === 'video' ? $('pwProcessNotes').value.trim() : '');
     fd.append('codegen', $('pwCodegen').value.trim());
     fd.append('selector_context', $('pwSelectorContext').value.trim());
     if (mode === 'video' && $('pwVideo').files.length) fd.append('video', $('pwVideo').files[0]);
@@ -194,7 +203,7 @@ async function generateAi(event) {
 }
 
 async function saveCurrent() {
-  if (!currentRecord) return;
+  if (!currentRecord) return false;
   setStatus('Guardando cambios...');
   try {
     const selectors = collectVariables('selector');
@@ -213,8 +222,10 @@ async function saveCurrent() {
     setRecord(data.record);
     setStatus('Cambios guardados.', true);
     await loadLibrary(false);
+    return true;
   } catch (err) {
     setStatus(err.message || 'Error al guardar.');
+    return false;
   }
 }
 
@@ -296,6 +307,7 @@ async function openRecord(id) {
 
 async function downloadRecord(id = currentRecord?.id) {
   if (!id) return;
+  if (currentRecord?.id === id && !(await saveCurrent())) return;
   const res = await authFetch(`/api/playwright/ai/generated/${id}/download`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -306,7 +318,7 @@ async function downloadRecord(id = currentRecord?.id) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${(currentRecord?.title || 'playwright-test').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.spec.ts`;
+  a.download = `${(currentRecord?.title || 'playwright-test').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.zip`;
   document.body.appendChild(a);
   a.click();
   a.remove();

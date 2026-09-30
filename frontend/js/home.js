@@ -14,7 +14,8 @@ const tools = [
   { id: 'entendimiento', roles: ['qa', 'lider'], label: 'Entendimiento', href: '/app/entendimiento.html' },
   { id: 'casos', roles: ['qa'], label: 'Casos de Prueba', href: '/app/casos.html' },
   { id: 'playwright', roles: ['qa'], label: 'Playwright', href: '/app/playwright_xlsx.html?v=20260602-1' },
-  { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20260727-3' },
+  { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20260930-1' },
+  { id: 'karate', roles: ['qa'], label: 'Karate', href: '/app/karate.html?v=20260930-1' },
 ];
 
 

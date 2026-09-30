@@ -364,6 +364,12 @@
       font-weight: 800;
     }
 
+    .pw-code-details { margin: 0 20px 18px; border: 1px solid #22324f; border-radius: 8px; background: rgba(15,23,42,.48); }
+    .pw-code-details summary { padding: 12px 14px; color: #dbeafe; cursor: pointer; font-weight: 800; }
+    .pw-code-details .pw-code { width: calc(100% - 28px); margin: 0 14px 14px; }
+    .pw-artifact-state { margin: 12px 20px; padding: 12px 14px; border-left: 3px solid #f59e0b; background: rgba(245,158,11,.08); color: #fde68a; }
+    .pw-artifact-state.ready { border-color: #22c55e; background: rgba(34,197,94,.08); color: #bbf7d0; }
+
     .pw-quality {
       padding: 18px 20px;
       border-top: 1px solid #22324f;
@@ -428,7 +434,7 @@
     <header class="pw-header">
       <div>
         <h1>Playwright</h1>
-        <p>Genera specs con IA, guardalos en la biblioteca y descarga el codigo cuando lo necesites.</p>
+        <p>Genera un borrador, completa datos y descarga el proyecto listo para revisar.</p>
       </div>
       <span class="pw-muted">Modulo QA</span>
     </header>
@@ -464,6 +470,7 @@
           <div id="videoMode" class="pw-mode-panel hidden">
             <label>Video del paso a paso<input id="pwVideo" type="file" accept=".mp4,.webm,.mov,.mkv" /></label>
             <label>Descripcion complementaria<textarea id="pwVideoDescription" placeholder="Detalla datos, decisiones o pasos que no se distingan claramente en el video"></textarea></label>
+            <label>Procesos que aparecen en el video<textarea id="pwProcessNotes" placeholder="Opcional: por ejemplo, Proceso 1: alta de propuesta. Proceso 2: consulta y descarga. Si no lo sabes, la IA los identifica y los deja para revisar."></textarea></label>
           </div>
           <label>Observaciones<textarea id="pwObservations" placeholder="Aclaraciones, datos particulares, validaciones o selectores conocidos"></textarea></label>
           <details class="pw-technical">
@@ -481,29 +488,35 @@
 
         <section class="pw-card pw-editor-card">
           <div class="pw-editor-head">
-            <h2>Codigo generado</h2>
-            <span class="pw-muted">.spec.ts</span>
+          <h2>Borrador de automatizacion</h2>
+          <span class="pw-muted">.spec.ts</span>
+        </div>
+        <p class="pw-artifact-state" id="pwArtifactStatus">Aun no hay una generacion.</p>
+        <div class="pw-vars">
+          <div>
+            <h2>Selectores a confirmar</h2>
+            <div id="pwSelectors" class="pw-variable-editor"></div>
           </div>
-          <textarea id="pwCode" class="pw-code" spellcheck="false" placeholder="El spec generado aparece aca..."></textarea>
-          <div class="pw-actions">
-            <button id="pwSave" class="pw-btn" type="button" disabled>Guardar cambios</button>
-            <button id="pwAudit" class="pw-btn secondary" type="button" disabled>Volver a auditar</button>
-            <button id="pwCopy" class="pw-btn secondary" type="button" disabled>Copiar</button>
-            <button id="pwDownload" class="pw-btn secondary" type="button" disabled>Descargar .spec.ts</button>
+          <div>
+            <h2>Datos editables</h2>
+            <div id="pwData" class="pw-variable-editor"></div>
           </div>
-          <div class="pw-vars">
-            <div>
-              <h2>Selectores editables</h2>
-              <div id="pwSelectors" class="pw-variable-editor"></div>
-            </div>
-            <div>
-              <h2>Datos editables</h2>
-              <div id="pwData" class="pw-variable-editor"></div>
-            </div>
-          </div>
-          <div class="pw-vars-actions">
-            <button id="pwApplyVariables" class="pw-btn secondary" type="button" disabled>Aplicar variables al codigo</button>
-          </div>
+        </div>
+        <div class="pw-vars-actions">
+          <button id="pwApplyVariables" class="pw-btn secondary" type="button" disabled>Actualizar vista del codigo</button>
+        </div>
+        <details class="pw-code-details">
+          <summary>Vista tecnica del spec</summary>
+        <textarea id="pwCode" class="pw-code" spellcheck="false" placeholder="El spec generado aparece aca..."></textarea>
+        <div class="pw-actions">
+          <button id="pwSave" class="pw-btn" type="button" disabled>Guardar cambios</button>
+          <button id="pwAudit" class="pw-btn secondary" type="button" disabled>Volver a auditar</button>
+          <button id="pwCopy" class="pw-btn secondary" type="button" disabled>Copiar</button>
+        </div>
+        </details>
+        <div class="pw-actions">
+          <button id="pwDownload" class="pw-btn" type="button" disabled>Descargar proyecto ZIP</button>
+        </div>
           <div class="pw-quality">
             <div>
               <h2>Revision automatica</h2>
@@ -555,6 +568,6 @@
     </section>
   </main>
 
-  <script type="module" src="/app/js/playwright_xlsx.js?v=20260611-4"></script>
+  <script type="module" src="/app/js/playwright_xlsx.js?v=20260930-1"></script>
 </body>
 </html>

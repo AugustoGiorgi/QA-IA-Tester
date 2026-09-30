@@ -3,17 +3,19 @@ from __future__ import annotations
 import json
 import base64
 import ast
+import io
 import re
 import shutil
 import subprocess
 import unicodedata
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pymongo import ASCENDING, DESCENDING
 
@@ -44,7 +46,7 @@ class GeneratedUpdateIn(BaseModel):
 
 
 MAX_CODE_LENGTH = 80000
-MAX_VIDEO_FRAMES = 12
+MAX_VIDEO_FRAMES = 18
 
 
 def _clean(value: Optional[str], max_len: int = 4000) -> str:
@@ -54,6 +56,122 @@ def _clean(value: Optional[str], max_len: int = 4000) -> str:
 def _slug(value: str) -> str:
     clean = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
     return clean or "generated-playwright-test"
+
+
+def _replace_object_with_config(code: str, name: str, expression: str) -> str:
+    match = re.search(rf"\bconst\s+{re.escape(name)}\s*=\s*\{{", code)
+    if not match:
+        return code
+    start = match.start()
+    opening = code.find("{", match.start())
+    depth, quote, escaped = 0, "", False
+    close = -1
+    for index in range(opening, len(code)):
+        char = code[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+            continue
+        if char in ("'", '"', "`"):
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                close = index
+                break
+    if close < 0:
+        return code
+    end = close + 1
+    if end < len(code) and code[end] == ";":
+        end += 1
+    return f"{code[:start]}const {name} = {expression};{code[end:]}"
+
+
+def _playwright_project(record: Dict[str, Any]) -> bytes:
+    source = str(record.get("generated_code") or "")
+    original_data = record.get("test_data") or {}
+    secret_keys = [key for key in original_data if re.search(r"(?i)(password|token|secret|api.?key|credential)", str(key))]
+    data = {
+        "selectors": record.get("selectors") or {},
+        "testData": {key: ("" if key in secret_keys else value) for key, value in original_data.items()},
+    }
+    source = _replace_object_with_config(source, "selectors", "qaConfig.selectors")
+    overrides: List[str] = []
+    env_lines = ["BASE_URL=https://completar-ambiente"]
+    for key in secret_keys:
+        env_name = "TEST_DATA_" + re.sub(r"[^A-Z0-9]+", "_", str(key).upper()).strip("_")
+        overrides.append(f"{json.dumps(str(key))}: process.env.{env_name} || qaConfig.testData[{json.dumps(str(key))}]")
+        env_lines.append(f"{env_name}=")
+    data_expression = "{ ...qaConfig.testData" + (", " + ", ".join(overrides) if overrides else "") + " }" if overrides else "qaConfig.testData"
+    source = _replace_object_with_config(source, "testData", data_expression)
+    base_match = re.search(r"\bconst\s+BASE_URL\s*=\s*([^;\n]+);", source)
+    if base_match and "process.env.BASE_URL" not in base_match.group(1):
+        source = source[:base_match.start()] + f"const BASE_URL = process.env.BASE_URL || ({base_match.group(1)});" + source[base_match.end():]
+    imports = (
+        "import { readFileSync } from 'node:fs';\n"
+        "import { resolve } from 'node:path';\n"
+        "const qaConfig = JSON.parse(readFileSync(resolve(__dirname, 'qa-data.json'), 'utf8'));\n\n"
+    )
+    first_import = re.search(r"^import .*?;\s*", source, re.M)
+    source = source[:first_import.end()] + imports + source[first_import.end():] if first_import else imports + source
+    slug = _slug(record.get("title") or "playwright-test")
+    package = {
+        "name": slug,
+        "version": "1.0.0",
+        "private": True,
+        "scripts": {"test": "playwright test", "test:ui": "playwright test --ui"},
+        "devDependencies": {"@playwright/test": "^1.56.0", "typescript": "^5.9.0", "dotenv": "^16.6.1"},
+    }
+    config = """import 'dotenv/config';
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests',
+  fullyParallel: false,
+  reporter: [['list'], ['html', { open: 'never' }]],
+  use: {
+    baseURL: process.env.BASE_URL || undefined,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+  },
+});
+"""
+    readme = """# Proyecto Playwright generado
+
+## Inicio
+1. Instalar Node.js LTS.
+2. Abrir una terminal en esta carpeta y ejecutar `npm install`.
+3. Ejecutar `npx playwright install chromium`.
+4. Copiar `.env.example` a `.env` y completar la URL del ambiente.
+5. Completar `tests/qa-data.json` con selectores y datos reales. Los valores TODO son pendientes, no datos confirmados.
+6. Ejecutar `npm test`.
+
+## Estado
+Este artefacto es un borrador de automatizacion revisado por IA. No se ejecuto contra el sistema real. Los selectores inferidos desde documentos o video deben confirmarse con la aplicacion; el video no permite conocer el DOM.
+Las credenciales se excluyen de `qa-data.json`; configura sus variables `TEST_DATA_*` solo en `.env` local y no subas ese archivo al repositorio.
+
+## Archivos
+- `tests/*.spec.ts`: flujo propuesto.
+- `tests/qa-data.json`: selectores y datos editables sin modificar el codigo.
+- `playwright.config.ts`: configuracion y evidencias de fallos.
+"""
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("package.json", json.dumps(package, indent=2))
+        archive.writestr("playwright.config.ts", config)
+        archive.writestr(f"tests/{slug}.spec.ts", source)
+        archive.writestr("tests/qa-data.json", json.dumps(data, ensure_ascii=False, indent=2))
+        archive.writestr("README.md", readme)
+        archive.writestr(".env.example", "\n".join(env_lines) + "\n")
+        archive.writestr(".gitignore", ".env\nnode_modules/\nplaywright-report/\ntest-results/\n")
+    output.seek(0)
+    return output.getvalue()
 
 
 def _as_public(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -194,6 +312,9 @@ def _generation_rules() -> str:
         "autocompletados, confirmaciones y guardados cuando aparezcan. "
         "Si el video u observaciones mencionan varios procesos, genera varios test(...) dentro del mismo archivo, "
         "pero con un solo import, un solo objeto selectors y un solo objeto testData compartidos. "
+        "En video, primero identifica los flujos de negocio distintos en orden temporal. Usa process_context como guia; "
+        "separa cada proceso en su propio test y no unas pasos de procesos distintos. Si el limite de frames no permite "
+        "confirmar un paso, conserva el proceso como pendiente en ai_notes en vez de inventarlo. "
         "No inventes credenciales, polizas, clientes ni IDs: crea una entrada especifica en testData con valor "
         "TODO por cada dato desconocido y UTILIZALA en el paso correspondiente. No declares variables sin uso. "
         "Nunca inventes codigos de transaccion, codigos de siniestro, numeros de poliza, fechas, agencias, "
@@ -373,7 +494,8 @@ def _generate_with_vision(payload: Dict[str, str], frames: List[Path]) -> Option
         prompt = (
             "Analiza cronologicamente estos frames de un video de paso a paso e identifica pantallas, campos, "
             "iconos, ventanas, solapas, selecciones y confirmaciones. Usa descripcion, observaciones, codegen "
-            "y selectores aportados para completar lo que no se ve. " + _generation_rules() + " "
+            "y selectores aportados para completar lo que no se ve. Identifica explicitamente cada flujo distinto, "
+            "su inicio y su cierre; genera un test independiente por flujo. " + _generation_rules() + " "
             "Responde JSON estricto con generated_code, selectors, test_data, ai_notes. "
             "Contexto:\n" + json.dumps(payload, ensure_ascii=False, indent=2)
         )
@@ -1389,6 +1511,7 @@ async def generate_playwright(
     execution_role: str = Form("qa"),
     description: str = Form(""),
     observations: str = Form(""),
+    process_context: str = Form(""),
     codegen: str = Form(""),
     selector_context: str = Form(""),
     video: Optional[UploadFile] = File(None),
@@ -1412,6 +1535,7 @@ async def generate_playwright(
         "execution_role": _clean(execution_role, 80),
         "description": _clean(description, 12000),
         "observations": _clean(observations, 6000),
+        "process_context": _clean(process_context, 3000),
         "codegen": _clean(codegen, 20000),
         "selector_context": _clean(selector_context, 12000),
         "video_file": video_name or "",
@@ -1487,7 +1611,7 @@ async def audit_generated(record_id: str, user: Dict[str, Any] = Depends(current
         key: current.get(key, "")
         for key in (
             "mode", "title", "requirement_id", "module", "initial_url", "execution_role",
-            "description", "observations", "codegen", "selector_context", "video_note",
+            "description", "observations", "process_context", "codegen", "selector_context", "video_note",
         )
     }
     audited = await run_in_threadpool(
@@ -1537,9 +1661,9 @@ async def download_generated(record_id: str, user: Dict[str, Any] = Depends(curr
     if not doc:
         raise HTTPException(status_code=404, detail="Prueba no encontrada.")
     await record_activity(user, "Descarga Playwright", "playwright", f"Descargo spec: {doc.get('title')}", {"record_id": record_id})
-    filename = f"{_slug(doc.get('title') or 'playwright-test')}.spec.ts"
-    return PlainTextResponse(
-        doc.get("generated_code") or "",
-        media_type="text/plain",
+    filename = f"{_slug(doc.get('title') or 'playwright-test')}.zip"
+    return StreamingResponse(
+        io.BytesIO(_playwright_project(doc)),
+        media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
