@@ -1,6 +1,11 @@
+import logging
+import time
 from typing import List, Optional
 from services.ai import build_messages, complete
-from services.markdown_table import first_table, merge_tables, normalize_first_table, rows_signature
+from services.markdown_table import first_table, normalize_first_table
+
+
+logger = logging.getLogger("qa_doc_analyzer.testcases")
 
 # =============== Prompt QA Senior ===============
 TESTCASES_PROMPT = (
@@ -262,74 +267,19 @@ def _is_invalid_followup_response(text: str) -> bool:
 # =============== Generación principal ===============
 def generate_testcases_markdown(doc_text: str, feedback_snippets: Optional[List[str]] = None) -> str:
     """
-    Genera casos de prueba en tabla Markdown.
-    No fuerza mínimo ni máximo.
-    Hace continuación solo si aparece cobertura real nueva.
-    Corta si la IA no encuentra reglas explícitas pendientes.
+    Genera en una sola llamada para evitar continuaciones seriales que reenvian
+    el documento y la tabla completa sin aportar cobertura consistente.
     """
+    started_at = time.perf_counter()
     msgs = build_messages(TESTCASES_PROMPT, doc_text, feedback_snippets)
     out = complete(msgs)
-
     out = normalize_first_table(out)
-
-    table = first_table(out)
-    headers, rows = table.headers, table.rows
-    prev_sig = rows_signature(rows)
-
-    if not headers:
-        return out
-
-    MAX_CONTINUATIONS = 4
-
-    followup = (
-        "Revisá la tabla anterior contra el DF. "
-        "Agregá nuevas filas SOLO si identificás una regla, flujo, validación, comportamiento condicional, "
-        "comportamiento dinámico o dependencia explícita del DF que no esté cubierta. "
-        "No agregues casos de formato, longitud, caracteres especiales, campos vacíos, valores negativos, decimales, "
-        "permisos, roles, datos usados en otra transacción ni mensajes de error, salvo que el DF los mencione explícitamente "
-        "o sean indispensables para probar una regla funcional indicada por el DF. "
-        "No agregues casos genéricos. "
-        "No repitas casos equivalentes. "
-        "No agregues casos por intuición QA si no trazan claramente al DF. "
-        "Si no hay reglas explícitas pendientes, respondé exactamente: SIN_CAMBIOS. "
-        "Si hay reglas pendientes, continuá la MISMA tabla Markdown EXACTA con estas CINCO columnas y los mismos encabezados, "
-        "en el MISMO orden: "
-        "'número', 'objetivo de la prueba', 'funcionalidad', 'resultado esperado', 'observaciones'. "
-        "Continuá la numeración desde el último número usado. "
-        "No agregues texto fuera de la tabla."
+    rows = first_table(out).rows
+    logger.info(
+        "testcase_generation_completed model_response_seconds=%.2f document_chars=%d feedback_snippets=%d generated_cases=%d",
+        time.perf_counter() - started_at,
+        len(doc_text),
+        len(feedback_snippets or []),
+        len(rows),
     )
-
-    parts = [out]
-    i = 0
-
-    while i < MAX_CONTINUATIONS:
-        probe_msgs = msgs + [
-            {
-                "role": "assistant",
-                "content": "\n\n".join(parts),
-            },
-            {
-                "role": "user",
-                "content": followup,
-            },
-        ]
-
-        nxt = complete(probe_msgs)
-
-        if _is_invalid_followup_response(nxt):
-            break
-
-        nxt = normalize_first_table(nxt)
-
-        combined = "\n\n".join(parts + [nxt])
-        merged = merge_tables(combined)
-        new_sig = rows_signature(first_table(merged).rows)
-
-        if new_sig <= prev_sig:
-            break
-
-        parts.append(nxt)
-        prev_sig = new_sig
-        i += 1
-
-    return merge_tables("\n\n".join(parts))
+    return out
