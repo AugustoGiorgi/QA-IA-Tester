@@ -248,15 +248,15 @@
     }
 
     .pm-result-message {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
+      display: grid;
+      gap: 12px;
       padding-top: 4px;
     }
 
     .pm-result-message[hidden] { display: none; }
     .pm-result-message strong { color: #bbf7d0; }
+    .pm-result-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pm-result-actions button { width: auto !important; min-height: 42px; padding: 0 15px !important; }
 
     .pm-empty {
       display: grid;
@@ -449,13 +449,17 @@
         <button id="analyzeBtn" class="pm-primary" type="submit">Generar collection</button>
         <div id="postmanStatus" class="pm-status" role="status" aria-live="polite"></div>
         <div id="resultPanel" class="pm-result-message" hidden>
-          <strong>Collection lista.</strong>
-          <button class="pm-secondary" id="downloadPostmanCollection" type="button">Descargar collection.json</button>
+          <strong>Archivos generados</strong>
+          <div class="pm-result-actions">
+            <button class="pm-primary" id="downloadPostmanCollection" type="button">Descargar collection.json</button>
+            <button class="pm-secondary" id="downloadPostmanEnvironment" type="button">Descargar environment.json</button>
+            <button class="pm-secondary" id="newPostmanCollection" type="button">Nueva collection</button>
+          </div>
         </div>
       </form>
     </section>
   </main>
 
-  <script type="module" src="/app/js/postman.js?v=20261001-1"></script>
+  <script type="module" src="/app/js/postman.js?v=20261001-2"></script>
 </body>
 </html>

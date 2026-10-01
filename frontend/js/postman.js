@@ -32,27 +32,39 @@ function escapeHtml(value = '') {
 
 function renderResult() {
   $('resultPanel').hidden = false;
-  $('downloadPostmanCollection').onclick = () => downloadCollection();
+  $('downloadPostmanCollection').onclick = () => downloadFile('collection');
+  $('downloadPostmanEnvironment').onclick = () => downloadFile('environment');
+  $('newPostmanCollection').onclick = startNewCollection;
 }
 
-async function downloadCollection() {
+function startNewCollection() {
+  currentDraft = null;
+  $('sourceFiles').value = '';
+  $('manualText').value = '';
+  $('resultPanel').hidden = true;
+  updateSourceSummary();
+  setStatus('');
+  $('sourceFiles').click();
+}
+
+async function downloadFile(kind) {
   if (!currentDraft) return;
-  setStatus('Descargando collection...');
-  const res = await authFetch(`/api/postman/drafts/${currentDraft.id}/download/collection`);
+  const fileName = kind === 'environment' ? 'environment.json' : 'collection.json';
+  const res = await authFetch(`/api/postman/drafts/${currentDraft.id}/download/${kind}`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    setStatus(data.detail || 'No se pudo descargar la collection.');
+    setStatus(data.detail || `No se pudo descargar ${fileName}.`);
     return;
   }
   const blob = await res.blob();
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'collection.json';
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  setStatus('Collection descargada.', true);
+  setStatus(`${fileName} descargado.`, true);
 }
 
 async function analyze(event) {
@@ -85,7 +97,7 @@ async function analyze(event) {
     if (!res.ok) throw new Error(data.detail || 'No se pudo generar la collection.');
     currentDraft = data.draft;
     renderResult();
-    await downloadCollection();
+    await downloadFile('collection');
   } catch (error) {
     setStatus(error.message || 'No se pudo generar la collection.');
   } finally {
