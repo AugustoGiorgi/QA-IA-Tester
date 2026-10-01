@@ -97,6 +97,36 @@ Resultado esperado: Rechazo controlado.
         self.assertEqual(source["extension"], ".xlsx")
         self.assertIn("Crear siniestro", source["text"])
 
+    def test_cases_spreadsheet_exports_only_its_named_cases(self):
+        from openpyxl import Workbook
+
+        collection = {
+            "info": {"name": "API", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+            "item": [
+                {"name": "Autenticacion", "request": {"method": "POST", "url": {"raw": "https://api.example.test/api/auth"}}},
+                {"name": "Consultar", "request": {"method": "GET", "url": {"raw": "https://api.example.test/api/customer"}}},
+            ],
+        }
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["ID y escenario", "Endpoint sugerido", "Categoria", "Contexto inicial", "Valores de entrada", "Accion", "Criterio final"])
+        sheet.append(["CP-24 - Autenticacion sin contraseña", "POST /api/auth", "Negativo", "Usuario habilitado", "Omitir password", "Enviar request", "Rechazo controlado"])
+        buffer = BytesIO()
+        workbook.save(buffer)
+
+        import asyncio
+
+        collection_source = {"name": "collection.json", "extension": ".json", "text": json.dumps(collection), "size": 1, "warning": ""}
+        cases_source = asyncio.run(_read_upload(AsyncUpload("casos.xlsx", buffer.getvalue())))
+        cases_source["is_cases_file"] = True
+        model = build_intermediate_model([collection_source, cases_source])
+        requests = build_collection(model)["item"][0]["item"]
+
+        self.assertEqual(len(model["test_cases"]), 1)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["name"], "CP-24 - Autenticacion sin contraseña")
+        self.assertEqual(requests[0]["request"]["method"], "POST")
+
     def test_endpoint_without_excel_gets_base_ok_and_base_error_cases(self):
         openapi = """
 openapi: 3.0.0

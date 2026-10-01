@@ -93,11 +93,41 @@ async def _read_upload(file: UploadFile) -> Dict[str, Any]:
                 workbook = load_workbook(BytesIO(raw), read_only=True, data_only=True)
                 lines: List[str] = []
                 for sheet in workbook.worksheets:
-                    lines.append(f"HOJA: {sheet.title}")
-                    for row in sheet.iter_rows(values_only=True):
-                        values = [str(value).strip() for value in row if value not in (None, "")]
-                        if values:
-                            lines.append(" | ".join(values))
+                    rows = sheet.iter_rows(values_only=True)
+                    headers = [str(value or "").strip().lower() for value in next(rows, ())]
+                    columns = {header: index for index, header in enumerate(headers) if header}
+                    if any(key in columns for key in ("id y escenario", "caso", "nombre del caso")):
+                        for row in rows:
+                            values = [str(value or "").strip() for value in row]
+                            if not any(values):
+                                continue
+                            def cell(*keys: str) -> str:
+                                index = next((columns[key] for key in keys if key in columns), None)
+                                return values[index] if index is not None and index < len(values) else ""
+                            identifier = cell("id y escenario", "caso", "nombre del caso")
+                            identifier = re.sub(r"(?i)^caso\s+", "", identifier).strip()
+                            endpoint = cell("endpoint sugerido", "endpoint", "request")
+                            category = cell("categoria", "categoría", "tipo")
+                            context = cell("contexto inicial", "precondiciones", "precondicion")
+                            inputs = cell("valores de entrada", "datos de prueba", "datos")
+                            action = cell("accion", "acción", "pasos")
+                            expected = cell("criterio final", "resultado esperado", "expected result")
+                            lines.extend([
+                                f"CASO {identifier}",
+                                f"Endpoint: {endpoint}",
+                                f"Categoria: {category}",
+                                f"Precondiciones: {context}",
+                                f"Datos de prueba: {inputs}",
+                                f"Pasos: {action}",
+                                f"Resultado esperado: {expected}",
+                                "",
+                            ])
+                    else:
+                        lines.append(f"HOJA: {sheet.title}")
+                        for row in [next(rows, ())] + list(rows):
+                            values = [str(value).strip() for value in row if value not in (None, "")]
+                            if values:
+                                lines.append(" | ".join(values))
                 text = "\n".join(lines)
             except Exception:
                 parse_warning = "No se pudo leer el Excel. Verifica que sea .xlsx valido."
@@ -509,7 +539,8 @@ def _extract_test_cases(text: str, source: Dict[str, Any]) -> List[Dict[str, Any
         cases.append({
             "id": f"case_{len(cases) + 1}",
             "case_id": case_id,
-            "name": first_line.strip("# :-") or f"Caso {len(cases) + 1}",
+            "name": re.sub(r"(?i)^(?:caso|test case)\s+", "", first_line.strip("# :-")) or f"Caso {len(cases) + 1}",
+            "endpoint_hint": (re.search(r"(?im)^\s*endpoint\s*:\s*((?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\S+)", clean) or [None, ""])[1],
             "objective": "",
             "description": clean[:2500],
             "preconditions": [],
@@ -595,6 +626,44 @@ def _associate(cases: List[Dict[str, Any]], endpoints: List[Dict[str, Any]]) -> 
     associations: List[Dict[str, Any]] = []
     for case in cases:
         case_blob = " ".join([case.get("name", ""), case.get("description", ""), case.get("expected_result", "")]).lower()
+        endpoint_hint = str(case.get("endpoint_hint") or "").strip()
+        hint_match = re.match(r"(?i)^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)", endpoint_hint)
+        if hint_match:
+            hint_method, hint_path = hint_match.group(1).upper(), hint_match.group(2).rstrip("/").lower()
+            hint_segments = [segment for segment in hint_path.split("/") if segment]
+            exact_matches = []
+            for endpoint in endpoints:
+                path = str(endpoint.get("path", "")).rstrip("/").lower()
+                path_segments = [segment for segment in path.split("/") if segment]
+                if endpoint.get("method") != hint_method or len(path_segments) < len(hint_segments):
+                    continue
+                suffix = path_segments[-len(hint_segments):]
+                if all(expected == actual or (expected.startswith("{") and (actual.isdigit() or actual.startswith("{{"))) for expected, actual in zip(hint_segments, suffix)):
+                    exact_matches.append((len(path_segments), endpoint))
+            if exact_matches:
+                endpoint = min(exact_matches, key=lambda match: match[0])[1]
+                associations.append({
+                    "case_id": case["id"],
+                    "endpoint_id": endpoint["id"],
+                    "confidence": "Alta",
+                    "score": 100,
+                    "evidence": ["Endpoint indicado en la planilla"],
+                    "explanation": "Asociacion directa por el endpoint de la fila de casos.",
+                    "source": case["source_refs"][0]["source"],
+                    "confirmed": True,
+                })
+                continue
+            associations.append({
+                "case_id": case["id"],
+                "endpoint_id": "",
+                "confidence": "Sin coincidencia",
+                "score": 0,
+                "evidence": ["El endpoint indicado en la planilla no coincide con la collection."],
+                "explanation": "Revisar el endpoint en la fila antes de exportar el caso.",
+                "source": case["source_refs"][0]["source"],
+                "confirmed": False,
+            })
+            continue
         best: Optional[Tuple[int, Dict[str, Any], List[str]]] = None
         for endpoint in endpoints:
             evidence: List[str] = []
@@ -803,25 +872,35 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
         if source.get("warning"):
             warnings.append({"severity": "medium", "type": "source_read", "message": source["warning"], "source": source["name"]})
         data = _try_load_structured(source.get("text", ""))
+        is_postman_collection = isinstance(data, dict) and data.get("info", {}).get("schema", "").endswith("collection/v2.1.0/collection.json")
         if isinstance(data, dict) and ("openapi" in data or "swagger" in data or "paths" in data):
             endpoints.extend(_openapi_endpoints(data, source))
-        if isinstance(data, dict) and data.get("info", {}).get("schema", "").endswith("collection/v2.1.0/collection.json"):
+        if is_postman_collection:
             endpoints.extend(_postman_items(data.get("item") or [], source))
-        endpoints.extend(_curl_endpoints(source.get("text", ""), source))
-        endpoints.extend(_text_endpoints(source.get("text", ""), source))
-        test_cases.extend(_extract_test_cases(source.get("text", ""), source))
+        elif source.get("is_cases_file"):
+            test_cases.extend(_extract_test_cases(source.get("text", ""), source))
+        else:
+            endpoints.extend(_curl_endpoints(source.get("text", ""), source))
+            endpoints.extend(_text_endpoints(source.get("text", ""), source))
+            if not (isinstance(data, dict) and ("openapi" in data or "swagger" in data or "paths" in data)):
+                test_cases.extend(_extract_test_cases(source.get("text", ""), source))
     endpoints = _dedupe_endpoints(endpoints)
     variables, secret_warnings = _extract_variables(sources, endpoints)
     warnings.extend(secret_warnings)
     associations = _associate(test_cases, endpoints)
     coverage_source_text = "\n".join(source.get("text", "") for source in sources)
-    generated_cases, case_adjustments = _complete_qa_case_coverage(
-        endpoints,
-        test_cases,
-        associations,
-        any(source.get("is_cases_file") for source in sources),
-        coverage_source_text,
-    )
+    has_cases_file = any(source.get("is_cases_file") for source in sources)
+    if has_cases_file:
+        generated_cases = []
+        case_adjustments = {"added": [], "extra": []}
+    else:
+        generated_cases, case_adjustments = _complete_qa_case_coverage(
+            endpoints,
+            test_cases,
+            associations,
+            False,
+            coverage_source_text,
+        )
     if generated_cases:
         test_cases.extend(generated_cases)
         associations = _associate(test_cases, endpoints)
@@ -869,6 +948,7 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
         "sources": [{k: v for k, v in source.items() if k != "text"} for source in sources],
         "endpoints": endpoints,
         "test_cases": test_cases,
+        "has_cases_file": has_cases_file,
         "associations": associations,
         "variables": variables,
         "dependencies": [],
@@ -971,6 +1051,8 @@ def build_collection(model: Dict[str, Any]) -> Dict[str, Any]:
         if endpoint.get("status") in {"disabled", "blocked"}:
             continue
         endpoint_cases = cases_by_endpoint.get(endpoint.get("id"), [])
+        if model.get("has_cases_file") and not endpoint_cases:
+            continue
         if endpoint.get("id") in associated_endpoint_ids and not endpoint_cases:
             continue
         # Keep an explicit draft request when the source has no associated case.
@@ -999,7 +1081,7 @@ def build_collection(model: Dict[str, Any]) -> Dict[str, Any]:
             endpoint_name = endpoint.get("name") or f"{endpoint.get('method')} {endpoint.get('path')}"
             case_name = (case or {}).get("name") or "Pendiente: asociar caso y expectativa"
             item = {
-                "name": f"{case_name} [{endpoint.get('method')} {endpoint.get('path')}]" if case else f"Pendiente QA - {endpoint_name}",
+                "name": case_name if case else f"Pendiente QA - {endpoint_name}",
                 "request": request,
                 "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": _tests_for_endpoint(endpoint, case).splitlines()}}],
             }
