@@ -93,41 +93,64 @@ async def _read_upload(file: UploadFile) -> Dict[str, Any]:
                 workbook = load_workbook(BytesIO(raw), read_only=True, data_only=True)
                 lines: List[str] = []
                 for sheet in workbook.worksheets:
-                    rows = sheet.iter_rows(values_only=True)
-                    headers = [str(value or "").strip().lower() for value in next(rows, ())]
+                    rows = [[str(value or "").strip() for value in row] for row in sheet.iter_rows(values_only=True)]
+                    rows = [row for row in rows if any(row)]
+                    if not rows:
+                        continue
+                    known_headers = {
+                        "id y escenario", "id caso", "identificador", "id", "tc", "cp", "caso", "caso de prueba", "test case",
+                        "escenario", "nombre", "nombre del caso", "scenario", "test name", "titulo", "título", "descripcion", "descripción",
+                        "endpoint sugerido", "endpoint", "request", "url", "servicio", "resultado esperado", "expected result",
+                        "criterio final", "precondiciones", "precondicion", "precondición", "pasos", "steps", "datos de prueba",
+                    }
+                    header_row_index = 0
+                    for candidate_index, candidate in enumerate(rows[:5]):
+                        candidate_headers = {re.sub(r"\s+", " ", value.lower()) for value in candidate if value}
+                        if len(candidate_headers & known_headers) >= 2:
+                            header_row_index = candidate_index
+                            break
+                    headers = [re.sub(r"\s+", " ", str(value or "").strip().lower()) for value in rows[header_row_index]]
                     columns = {header: index for index, header in enumerate(headers) if header}
-                    if any(key in columns for key in ("id y escenario", "caso", "nombre del caso")):
-                        for row in rows:
-                            values = [str(value or "").strip() for value in row]
-                            if not any(values):
-                                continue
-                            def cell(*keys: str) -> str:
-                                index = next((columns[key] for key in keys if key in columns), None)
-                                return values[index] if index is not None and index < len(values) else ""
-                            identifier = cell("id y escenario", "caso", "nombre del caso")
-                            identifier = re.sub(r"(?i)^caso\s+", "", identifier).strip()
-                            endpoint = cell("endpoint sugerido", "endpoint", "request")
-                            category = cell("categoria", "categoría", "tipo")
-                            context = cell("contexto inicial", "precondiciones", "precondicion")
-                            inputs = cell("valores de entrada", "datos de prueba", "datos")
-                            action = cell("accion", "acción", "pasos")
-                            expected = cell("criterio final", "resultado esperado", "expected result")
-                            lines.extend([
-                                f"CASO {identifier}",
-                                f"Endpoint: {endpoint}",
-                                f"Categoria: {category}",
-                                f"Precondiciones: {context}",
-                                f"Datos de prueba: {inputs}",
-                                f"Pasos: {action}",
-                                f"Resultado esperado: {expected}",
-                                "",
-                            ])
-                    else:
-                        lines.append(f"HOJA: {sheet.title}")
-                        for row in [next(rows, ())] + list(rows):
-                            values = [str(value).strip() for value in row if value not in (None, "")]
-                            if values:
-                                lines.append(" | ".join(values))
+                    def cell(values: List[str], *keys: str) -> str:
+                        index = next((columns[key] for key in keys if key in columns), None)
+                        return values[index] if index is not None and index < len(values) else ""
+                    for row_index, row in enumerate(rows[header_row_index + 1:], start=1):
+                        values = [str(value or "").strip() for value in row]
+                        if not any(values) or re.match(r"(?i)^\s*(?:id|caso|test case|escenario)\s*$", " ".join(values)):
+                            continue
+                        identifier = cell(values, "id y escenario", "id caso", "identificador", "id", "tc", "cp")
+                        scenario = cell(values, "escenario", "nombre", "nombre del caso", "scenario", "test name", "titulo", "título", "descripcion", "descripción", "caso de prueba")
+                        if not identifier:
+                            identifier = cell(values, "caso", "test case")
+                        if not identifier:
+                            identifier = next((value for value in values if re.match(r"(?i)^(?:CP|TC|CASE)[\s#:_-]*\d+", value)), "")
+                        if not scenario and "id y escenario" not in columns:
+                            scenario = next((value for value in values if value and value != identifier and not re.match(r"(?i)^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s", value)), "")
+                        identifier = re.sub(r"(?i)^caso\s+", "", identifier).strip()
+                        scenario = re.sub(rf"(?i)^\s*{re.escape(identifier)}\s*(?:[-:|]|\s)\s*", "", scenario).strip() if identifier else scenario
+                        case_title = " - ".join(part for part in (identifier, scenario) if part)
+                        if not case_title:
+                            case_title = f"Caso {row_index}"
+                        endpoint = cell(values, "endpoint sugerido", "endpoint", "request", "url", "servicio")
+                        if not endpoint:
+                            endpoint = next((value for value in values if re.match(r"(?i)^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\S+", value)), "")
+                        category = cell(values, "categoria", "categoría", "tipo")
+                        context = cell(values, "contexto inicial", "precondiciones", "precondicion", "precondición")
+                        inputs = cell(values, "valores de entrada", "datos de prueba", "datos", "entrada")
+                        action = cell(values, "accion", "acción", "pasos", "steps")
+                        expected = cell(values, "criterio final", "resultado esperado", "expected result", "expected")
+                        extra = [f"{headers[i]}: {value}" for i, value in enumerate(values) if value and i < len(headers) and value not in {identifier, scenario, endpoint, category, context, inputs, action, expected}]
+                        lines.extend([
+                            f"CASO {case_title}",
+                            f"Endpoint: {endpoint}",
+                            f"Categoria: {category}",
+                            f"Precondiciones: {context}",
+                            f"Datos de prueba: {inputs}",
+                            f"Pasos: {action}",
+                            f"Resultado esperado: {expected}",
+                            *extra,
+                            "",
+                        ])
                 text = "\n".join(lines)
             except Exception:
                 parse_warning = "No se pudo leer el Excel. Verifica que sea .xlsx valido."
@@ -877,7 +900,8 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
             endpoints.extend(_openapi_endpoints(data, source))
         if is_postman_collection:
             endpoints.extend(_postman_items(data.get("item") or [], source))
-        elif source.get("is_cases_file"):
+        elif source.get("is_cases_file") or source.get("extension", "").lower() in {".xlsx", ".csv"}:
+            source["is_cases_file"] = True
             test_cases.extend(_extract_test_cases(source.get("text", ""), source))
         else:
             endpoints.extend(_curl_endpoints(source.get("text", ""), source))
@@ -889,7 +913,7 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
     warnings.extend(secret_warnings)
     associations = _associate(test_cases, endpoints)
     coverage_source_text = "\n".join(source.get("text", "") for source in sources)
-    has_cases_file = any(source.get("is_cases_file") for source in sources)
+    has_cases_file = any(source.get("is_cases_file") or source.get("extension", "").lower() in {".xlsx", ".csv"} for source in sources)
     if has_cases_file:
         generated_cases = []
         case_adjustments = {"added": [], "extra": []}

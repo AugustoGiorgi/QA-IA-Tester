@@ -109,8 +109,9 @@ Resultado esperado: Rechazo controlado.
         }
         workbook = Workbook()
         sheet = workbook.active
-        sheet.append(["ID y escenario", "Endpoint sugerido", "Categoria", "Contexto inicial", "Valores de entrada", "Accion", "Criterio final"])
-        sheet.append(["CP-24 - Autenticacion sin contraseña", "POST /api/auth", "Negativo", "Usuario habilitado", "Omitir password", "Enviar request", "Rechazo controlado"])
+        sheet.append(["Matriz de casos de prueba"])
+        sheet.append(["ID", "Nombre del caso", "Endpoint", "Categoria", "Precondicion", "Datos de prueba", "Pasos", "Resultado esperado"])
+        sheet.append(["CP-24", "CP-24 - Autenticacion sin contraseña", "POST /api/auth", "Negativo", "Usuario habilitado", "Omitir password", "Enviar request", "Rechazo controlado"])
         buffer = BytesIO()
         workbook.save(buffer)
 
@@ -118,7 +119,6 @@ Resultado esperado: Rechazo controlado.
 
         collection_source = {"name": "collection.json", "extension": ".json", "text": json.dumps(collection), "size": 1, "warning": ""}
         cases_source = asyncio.run(_read_upload(AsyncUpload("casos.xlsx", buffer.getvalue())))
-        cases_source["is_cases_file"] = True
         model = build_intermediate_model([collection_source, cases_source])
         requests = build_collection(model)["item"][0]["item"]
 
