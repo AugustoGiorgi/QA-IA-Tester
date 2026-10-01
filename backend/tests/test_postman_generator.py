@@ -158,6 +158,31 @@ paths:
         )
         self.assertEqual(len(model["endpoints"]), 1)
 
+    def test_postman_collection_variables_export_to_environment(self):
+        collection = {
+            "info": {"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+            "variable": [
+                {"key": "baseUrl", "value": "https://api.example.test"},
+                {"key": "accessToken", "value": "do-not-export-this", "type": "secret"},
+            ],
+            "item": [{"name": "Consultar", "request": {
+                "method": "GET",
+                "url": {"raw": "{{baseUrl}}/users/:userId?include=profile"},
+            }}],
+        }
+        text = json.dumps(collection)
+        model = build_intermediate_model([
+            {"name": "api.postman_collection.json", "extension": ".json", "text": text, "size": len(text), "warning": ""}
+        ])
+
+        request_url = build_collection(model)["item"][0]["item"][0]["request"]["url"]["raw"]
+        environment = {item["key"]: item for item in build_environment(model)["values"]}
+
+        self.assertIn("{{userId}}", request_url)
+        self.assertEqual(environment["baseUrl"]["value"], "https://api.example.test")
+        self.assertEqual(environment["userId"]["value"], "")
+        self.assertEqual(environment["accessToken"]["value"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

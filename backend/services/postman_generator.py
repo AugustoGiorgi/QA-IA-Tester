@@ -312,13 +312,42 @@ def _postman_items(items: List[Dict[str, Any]], source: Dict[str, Any], folder: 
             continue
         url = request.get("url") or {}
         raw_url = url.get("raw") if isinstance(url, dict) else str(url)
-        parsed = urlparse(raw_url.replace("{{", "").replace("}}", ""))
+        raw_url = str(raw_url or "")
+        # Mask Postman variables while parsing so braces in {{baseUrl}} survive.
+        placeholders: Dict[str, str] = {}
+        def mask_placeholder(match: re.Match[str]) -> str:
+            token = f"POSTMANVAR{len(placeholders)}"
+            placeholders[token] = match.group(0)
+            return token
+        masked_url = re.sub(r"\{\{[A-Za-z0-9_.-]+\}\}", mask_placeholder, raw_url)
+        parsed = urlparse(masked_url)
+        restore = lambda value: re.sub(r"POSTMANVAR\d+", lambda match: placeholders.get(match.group(0), match.group(0)), value)
+        base_url = restore(f"{parsed.scheme}://{parsed.netloc}") if parsed.scheme and parsed.netloc else ""
+        path = restore(parsed.path or "")
+        variable_prefix = re.match(r"^(\{\{[A-Za-z0-9_.-]+\}\})(/.*)?$", raw_url)
+        if not base_url and variable_prefix:
+            base_url = variable_prefix.group(1)
+            path = variable_prefix.group(2) or "/"
+        if not base_url and isinstance(url, dict) and url.get("host"):
+            host_parts = url.get("host") or []
+            host = ".".join(host_parts) if isinstance(host_parts, list) else str(host_parts)
+            protocol = url.get("protocol") or "https"
+            base_url = f"{protocol}://{host}" if host else ""
+            path_parts = url.get("path") or []
+            path = "/" + "/".join(str(part) for part in path_parts) if isinstance(path_parts, list) else "/" + str(path_parts).lstrip("/")
+        path = re.sub(r":([A-Za-z_][A-Za-z0-9_]*)", r"{\1}", path)
         headers = [
             {"key": h.get("key", ""), "value": h.get("value", ""), "description": h.get("description", "")}
             for h in request.get("header") or []
             if isinstance(h, dict)
         ]
-        query = [{"key": k, "value": v, "description": ""} for k, v in parse_qsl(parsed.query)]
+        if isinstance(url, dict) and url.get("query"):
+            query = [
+                {"key": str(item.get("key") or ""), "value": str(item.get("value") or ""), "description": item.get("description", "")}
+                for item in url.get("query", []) if isinstance(item, dict) and not item.get("disabled")
+            ]
+        else:
+            query = [{"key": k, "value": restore(v), "description": ""} for k, v in parse_qsl(parsed.query)]
         body_data = request.get("body") or {}
         body = {"mode": body_data.get("mode") or "none"}
         if body["mode"] == "raw":
@@ -326,14 +355,14 @@ def _postman_items(items: List[Dict[str, Any]], source: Dict[str, Any], folder: 
         elif body["mode"] in {"urlencoded", "formdata"}:
             body.update({"items": body_data.get(body["mode"]) or []})
         endpoint = {
-            "id": _endpoint_id(request.get("method", "GET").upper(), parsed.path or raw_url, len(endpoints) + 1),
+            "id": _endpoint_id(request.get("method", "GET").upper(), path or raw_url, len(endpoints) + 1),
             "name": item.get("name") or raw_url,
             "description": request.get("description") or "",
             "method": request.get("method", "GET").upper(),
-            "protocol": parsed.scheme,
-            "base_url": f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else "",
-            "path": parsed.path or raw_url,
-            "path_params": [],
+            "protocol": parsed.scheme or (url.get("protocol", "") if isinstance(url, dict) else ""),
+            "base_url": base_url,
+            "path": path or raw_url,
+            "path_params": [{"key": match.group(1), "value": "", "description": ""} for match in re.finditer(r"\{([A-Za-z0-9_.-]+)\}", path)],
             "query_params": query,
             "headers": headers,
             "cookies": [],
@@ -525,8 +554,9 @@ def _extract_variables(sources: List[Dict[str, Any]], endpoints: List[Dict[str, 
 
     for endpoint in endpoints:
         if endpoint.get("base_url"):
-            add_var("baseUrl", "environment", endpoint["source_refs"][0]["source"], endpoint["base_url"], False, "Base URL detectada")
-            endpoint["base_url"] = "{{baseUrl}}"
+            if not re.search(r"\{\{[A-Za-z0-9_.-]+\}\}", endpoint["base_url"]):
+                add_var("baseUrl", "environment", endpoint["source_refs"][0]["source"], endpoint["base_url"], False, "Base URL detectada")
+                endpoint["base_url"] = "{{baseUrl}}"
         for header in endpoint.get("headers", []):
             if re.search(r"(?i)(authorization|token|api[-_]?key|secret|cookie)", header.get("key", "")):
                 add_var(header.get("key", "secret"), "environment", endpoint["source_refs"][0]["source"], "", True, "Header sensible")
@@ -534,10 +564,21 @@ def _extract_variables(sources: List[Dict[str, Any]], endpoints: List[Dict[str, 
         for parameter in endpoint.get("path_params", []) + endpoint.get("query_params", []):
             key = str(parameter.get("key") or "").strip()
             if key:
-                add_var(key, "collection", endpoint["source_refs"][0]["source"], str(parameter.get("value") or ""), False, "Parametro de request")
+                add_var(key, "environment", endpoint["source_refs"][0]["source"], str(parameter.get("value") or ""), False, "Parametro de request")
 
     for source in sources:
         text = source.get("text", "")
+        structured = _try_load_structured(text)
+        source_variables = []
+        if isinstance(structured, dict):
+            source_variables = structured.get("variable") or structured.get("values") or []
+        for item in source_variables:
+            if not isinstance(item, dict) or not item.get("key"):
+                continue
+            key = str(item["key"])
+            value = str(item.get("value") or "")
+            sensitive = bool(item.get("type") == "secret" or re.search(r"(?i)(token|secret|password|api.?key|authorization)", key))
+            add_var(key, "environment", source["name"], value, sensitive, "Variable importada desde la fuente")
         for name in re.findall(r"\{\{([A-Za-z0-9_.-]+)\}\}", text):
             add_var(name, "environment", source["name"], "", False, "Variable marcada en documentacion")
         for secret in SECRET_RE.finditer(text):
@@ -980,7 +1021,7 @@ def build_collection(model: Dict[str, Any]) -> Dict[str, Any]:
 
 def build_environment(model: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "name": "QA Environment",
+        "name": f"{model.get('project_name') or 'QA'} Environment",
         "values": [
             {
                 "key": var["key"],

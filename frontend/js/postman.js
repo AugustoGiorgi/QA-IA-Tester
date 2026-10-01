@@ -23,11 +23,11 @@ function fileChips(files, emptyText) {
 }
 
 function updateSourceSummary() {
-  $('sourceSummary').innerHTML = fileChips([...$('sourceFiles').files], 'Sin archivos seleccionados');
+  $('sourceSummary').innerHTML = fileChips([...$('collectionFile').files], 'Sin collection seleccionada');
 }
 
 function updateCaseSummary() {
-  $('caseSummary').innerHTML = fileChips([...$('caseFile').files], 'Sin Excel cargado');
+  $('caseSummary').innerHTML = fileChips([...$('caseFile').files], 'Sin archivo de casos');
 }
 
 function renderLoading() {
@@ -35,8 +35,8 @@ function renderLoading() {
   $('resultPanel').innerHTML = `
     <div class="pm-loader">
       <span class="pm-spinner"></span>
-      <strong>Generando collection...</strong>
-      <span class="pm-help">Analizando endpoints, casos, variables y archivos cargados.</span>
+      <strong>Preparando archivos de Postman...</strong>
+      <span class="pm-help">Organizando requests, casos y variables.</span>
     </div>
   `;
 }
@@ -56,7 +56,6 @@ async function loadDrafts() {
     list.querySelectorAll('[data-open-draft]').forEach(button => button.addEventListener('click', () => {
       currentDraft = drafts.find(draft => draft.id === button.dataset.openDraft) || null;
       if (!currentDraft) return;
-      $('projectName').value = currentDraft.project_name || '';
       renderResult(currentDraft);
       document.getElementById('resultPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
       setStatus('Borrador retomado.');
@@ -129,20 +128,26 @@ function renderResult(draft) {
     </section>
     <div class="pm-actions">
       <button class="pm-primary" id="downloadPostmanCollection" type="button">Descargar collection.json</button>
+      <button class="pm-secondary" id="downloadPostmanEnvironment" type="button">Descargar environment.json</button>
     </div>
     <section class="pm-guide">
       <h3>Como cargarlo en Postman</h3>
       <ol>
         <li>Abrir Postman.</li>
         <li>Ir a Import.</li>
-        <li>Seleccionar el archivo collection descargado.</li>
-        <li>Completar variables vacias antes de ejecutar.</li>
+        <li>En Postman, pulsar Import y seleccionar ambos archivos JSON.</li>
+        <li>Elegir el environment importado en el selector de ambientes.</li>
+        <li>Completar las variables vacias y los secretos en Postman.</li>
       </ol>
     </section>
   `;
   $('downloadPostmanCollection').addEventListener('click', async () => {
     if (!(await saveReview())) return;
     await downloadFile('collection');
+  });
+  $('downloadPostmanEnvironment').addEventListener('click', async () => {
+    if (!(await saveReview())) return;
+    await downloadFile('environment');
   });
   $('savePostmanReview').addEventListener('click', saveReview);
 }
@@ -207,6 +212,7 @@ async function downloadFile(kind) {
   if (!currentDraft) return;
   const filenames = {
     collection: 'collection.json',
+    environment: 'environment.json',
   };
   setStatus('Preparando descarga...');
   const res = await authFetch(`/api/postman/drafts/${currentDraft.id}/download/${kind}`);
@@ -228,20 +234,20 @@ async function downloadFile(kind) {
 
 async function analyze(event) {
   event.preventDefault();
-  const hasSources = $('sourceFiles').files.length > 0;
+  const collection = $('collectionFile').files[0];
   const comments = $('manualText').value.trim();
-  if (!hasSources && !comments) {
-    setStatus('Carga archivos principales o agrega comentarios con endpoints.');
+  if (!collection) {
+    setStatus('Selecciona la collection JSON de Postman.');
     return;
   }
-  setStatus('Generando collection...');
+  setStatus('Preparando collection y environment...');
   renderLoading();
   $('analyzeBtn').disabled = true;
   try {
     const fd = new FormData();
-    fd.append('project_name', $('projectName').value.trim());
+    fd.append('project_name', collection.name.replace(/\.json$/i, '').replace(/[_-]+/g, ' ').trim());
     fd.append('manual_text', comments);
-    [...$('sourceFiles').files].forEach(file => fd.append('files', file));
+    fd.append('files', collection);
     if ($('caseFile').files[0]) fd.append('test_cases_file', $('caseFile').files[0]);
     const res = await authFetch('/api/postman/analyze', { method: 'POST', body: fd });
     const data = await res.json().catch(() => ({}));
@@ -261,6 +267,6 @@ async function analyze(event) {
 }
 
 $('postmanForm').addEventListener('submit', analyze);
-$('sourceFiles').addEventListener('change', updateSourceSummary);
+$('collectionFile').addEventListener('change', updateSourceSummary);
 $('caseFile').addEventListener('change', updateCaseSummary);
 loadDrafts();

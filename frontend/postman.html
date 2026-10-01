@@ -420,51 +420,47 @@
       <form id="postmanForm" class="postman-panel postman-form">
         <section class="pm-section">
           <div class="pm-section-head">
-            <h2>Archivos principales</h2>
+            <h2>Collection</h2>
             <span class="pm-pill">1</span>
           </div>
           <label class="pm-dropzone">
-            <span class="pm-icon">API</span>
+            <span class="pm-icon">JSON</span>
             <span class="pm-upload-title">
-              <strong>Cargar documentos de la API</strong>
-              <small>Collection, funcionales, Swagger, cURL, PDF, DOCX o TXT</small>
+              <strong>Cargar collection de Postman</strong>
+              <small>Archivo JSON con los endpoints y requests</small>
             </span>
             <span id="sourceSummary" class="pm-files">Sin archivos seleccionados</span>
-            <input id="sourceFiles" type="file" multiple accept=".json,.yaml,.yml,.md,.txt,.docx,.pdf,.xml,.curl,.http,.csv,.xlsx" />
+            <input id="collectionFile" type="file" accept=".json,application/json" required />
           </label>
         </section>
 
         <section class="pm-section">
           <div class="pm-section-head">
-            <h2>Excel de casos</h2>
+            <h2>Casos de prueba</h2>
             <span class="pm-pill">2</span>
           </div>
           <label class="pm-dropzone compact">
-            <span class="pm-icon">XLS</span>
-            <span class="pm-upload-title">
-              <strong>Opcional</strong>
-              <small>Si lo cargas, se usa para comparar casos faltantes o sobrantes</small>
-            </span>
-            <span id="caseSummary" class="pm-files">Sin Excel cargado</span>
-            <input id="caseFile" type="file" accept=".xlsx,.csv,.txt" />
-          </label>
-        </section>
-
-        <label>Nombre del proyecto
-          <input id="projectName" type="text" placeholder="Proyecto API" />
-        </label>
+              <span class="pm-icon">XLS</span>
+              <span class="pm-upload-title">
+                <strong>Agregar archivo de casos</strong>
+                <small>Excel o CSV; opcional si los casos ya están en la collection</small>
+              </span>
+              <span id="caseSummary" class="pm-files">Sin archivo de casos</span>
+              <input id="caseFile" type="file" accept=".xlsx,.csv,.txt" />
+            </label>
+          </section>
 
         <label>Comentarios
           <textarea id="manualText" rows="6" placeholder="Aclaraciones, reglas de negocio, datos obligatorios, auth, ambiente o criterios especiales"></textarea>
         </label>
 
-        <button id="analyzeBtn" class="pm-primary" type="submit">Generar collection</button>
+        <button id="analyzeBtn" class="pm-primary" type="submit">Analizar y preparar archivos</button>
         <div id="postmanStatus" class="pm-status"></div>
       </form>
 
       <section class="postman-panel postman-result">
         <div id="resultPanel" class="pm-empty">
-          <p>Carga los insumos y genera la collection.</p>
+          <p>Carga una collection para preparar los archivos de Postman.</p>
         </div>
       </section>
     </section>
