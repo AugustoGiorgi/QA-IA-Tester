@@ -14,7 +14,7 @@ const tools = [
   { id: 'entendimiento', roles: ['qa', 'lider'], label: 'Entendimiento', href: '/app/entendimiento.html' },
   { id: 'casos', roles: ['qa'], label: 'Casos de Prueba', href: '/app/casos.html' },
   { id: 'playwright', roles: ['qa'], label: 'Playwright', href: '/app/playwright_xlsx.html?v=20260602-1' },
-  { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20260930-1' },
+  { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20261001-2' },
   { id: 'karate', roles: ['qa'], label: 'Karate', href: '/app/karate.html?v=20260930-1' },
 ];
 
@@ -52,7 +52,29 @@ async function navigate(id) {
 
 function renderModule(tool) {
   setHeader(tool.label, 'Modulo integrado');
-  appView.innerHTML = `<iframe class="module-frame" src="${tool.href}" title="${tool.label}"></iframe>`;
+  const frame = document.createElement('iframe');
+  frame.className = 'module-frame';
+  frame.title = tool.label;
+  frame.setAttribute('scrolling', 'no');
+  frame.src = tool.href;
+  frame.addEventListener('load', () => {
+    const doc = frame.contentDocument;
+    if (!doc?.documentElement || !doc.body) return;
+
+    const syncHeight = () => {
+      const contentHeight = Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight);
+      frame.style.height = `${Math.max(contentHeight, 560)}px`;
+    };
+    const resizeObserver = window.ResizeObserver ? new ResizeObserver(syncHeight) : null;
+    resizeObserver?.observe(doc.documentElement);
+    resizeObserver?.observe(doc.body);
+    const mutationObserver = new MutationObserver(() => requestAnimationFrame(syncHeight));
+    mutationObserver.observe(doc.body, { childList: true, subtree: true, attributes: true, characterData: true });
+    doc.defaultView.addEventListener('resize', syncHeight);
+    doc.fonts?.ready.then(syncHeight);
+    syncHeight();
+  });
+  appView.replaceChildren(frame);
 }
 
 function renderRegistroIA() {

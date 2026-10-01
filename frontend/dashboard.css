@@ -516,6 +516,8 @@ body.app-shell .module-frame {
   display: block;
   width: 100%;
   min-height: calc(100vh - 118px);
+  height: auto;
+  overflow: hidden;
   border: 1px solid var(--shell-line);
   border-radius: 8px;
   background: #ffffff;
