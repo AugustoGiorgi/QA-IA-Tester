@@ -40,6 +40,7 @@ function renderResult() {
 function startNewCollection() {
   currentDraft = null;
   $('sourceFiles').value = '';
+  $('projectName').value = '';
   $('manualText').value = '';
   $('resultPanel').hidden = true;
   updateSourceSummary();
@@ -79,6 +80,12 @@ async function analyze(event) {
   }
 
   const collection = collections[0];
+  const projectName = $('projectName').value.trim();
+  if (!projectName) {
+    setStatus('Escribí el nombre de la collection antes de generarla.');
+    $('projectName').focus();
+    return;
+  }
   const comments = $('manualText').value.trim();
   currentDraft = null;
   $('resultPanel').hidden = true;
@@ -87,7 +94,7 @@ async function analyze(event) {
 
   try {
     const fd = new FormData();
-    fd.append('project_name', collection.name.replace(/\.json$/i, '').replace(/[_-]+/g, ' ').trim());
+    fd.append('project_name', projectName);
     fd.append('manual_text', comments);
     fd.append('files', collection);
     if (caseFiles[0]) fd.append('test_cases_file', caseFiles[0]);
