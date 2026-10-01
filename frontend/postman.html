@@ -42,8 +42,8 @@
 
     .postman-grid {
       display: grid;
-      grid-template-columns: minmax(380px, 500px) minmax(0, 1fr);
-      gap: 20px;
+      grid-template-columns: minmax(0, 900px);
+      justify-content: center;
       align-items: start;
     }
 
@@ -55,16 +55,14 @@
     }
 
     .postman-form {
-      position: sticky;
-      top: 18px;
       display: grid;
-      gap: 18px;
+      gap: 16px;
       padding: 24px;
     }
 
     .postman-result {
-      min-height: 620px;
-      padding: 24px;
+      min-height: 0;
+      padding: 0;
     }
 
     .pm-section {
@@ -100,7 +98,7 @@
 
     .pm-dropzone {
       display: grid;
-      min-height: 220px;
+      min-height: 190px;
       place-items: center;
       gap: 12px;
       padding: 24px;
@@ -127,6 +125,11 @@
       border-color: rgba(147, 197, 253, .82);
       background: rgba(37, 99, 235, .11);
       transform: translateY(-1px);
+    }
+
+    .pm-dropzone.dragover {
+      border-color: #93c5fd;
+      background: rgba(37, 99, 235, .2);
     }
 
     .pm-dropzone input {
@@ -243,6 +246,17 @@
     .pm-status.ok {
       color: #86efac;
     }
+
+    .pm-result-message {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-top: 4px;
+    }
+
+    .pm-result-message[hidden] { display: none; }
+    .pm-result-message strong { color: #bbf7d0; }
 
     .pm-empty {
       display: grid;
@@ -418,59 +432,30 @@
 
     <section class="postman-grid">
       <form id="postmanForm" class="postman-panel postman-form">
-        <section class="pm-section">
-          <div class="pm-section-head">
-            <h2>Collection</h2>
-            <span class="pm-pill">1</span>
-          </div>
-          <label class="pm-dropzone">
-            <span class="pm-icon">JSON</span>
-            <span class="pm-upload-title">
-              <strong>Cargar collection de Postman</strong>
-              <small>Archivo JSON con los endpoints y requests</small>
-            </span>
-            <span id="sourceSummary" class="pm-files">Sin archivos seleccionados</span>
-            <input id="collectionFile" type="file" accept=".json,application/json" required />
-          </label>
-        </section>
-
-        <section class="pm-section">
-          <div class="pm-section-head">
-            <h2>Casos de prueba</h2>
-            <span class="pm-pill">2</span>
-          </div>
-          <label class="pm-dropzone compact">
-              <span class="pm-icon">XLS</span>
-              <span class="pm-upload-title">
-                <strong>Agregar archivo de casos</strong>
-                <small>Excel o CSV; opcional si los casos ya están en la collection</small>
-              </span>
-              <span id="caseSummary" class="pm-files">Sin archivo de casos</span>
-              <input id="caseFile" type="file" accept=".xlsx,.csv,.txt" />
-            </label>
-          </section>
-
-        <label>Comentarios
-          <textarea id="manualText" rows="6" placeholder="Aclaraciones, reglas de negocio, datos obligatorios, auth, ambiente o criterios especiales"></textarea>
+        <label class="pm-dropzone" id="postmanDropzone">
+          <span class="pm-icon">↓</span>
+          <span class="pm-upload-title">
+            <strong>Soltá acá los archivos o seleccioná desde tu equipo</strong>
+            <small>Obligatorio: una collection JSON · Opcional: un Excel o CSV con los casos</small>
+          </span>
+          <span id="sourceSummary" class="pm-files">Collection y casos todavía no seleccionados</span>
+          <input id="sourceFiles" type="file" multiple accept=".json,.xlsx,.csv" />
         </label>
 
-        <button id="analyzeBtn" class="pm-primary" type="submit">Analizar y preparar archivos</button>
-        <div id="postmanStatus" class="pm-status"></div>
-      </form>
+        <label>Comentarios o indicaciones
+          <textarea id="manualText" rows="3" placeholder="Reglas de negocio, datos que deben parametrizarse o aclaraciones"></textarea>
+        </label>
 
-      <section class="postman-panel postman-result">
-        <div id="resultPanel" class="pm-empty">
-          <p>Carga una collection para preparar los archivos de Postman.</p>
+        <button id="analyzeBtn" class="pm-primary" type="submit">Generar collection</button>
+        <div id="postmanStatus" class="pm-status" role="status" aria-live="polite"></div>
+        <div id="resultPanel" class="pm-result-message" hidden>
+          <strong>Collection lista.</strong>
+          <button class="pm-secondary" id="downloadPostmanCollection" type="button">Descargar collection.json</button>
         </div>
-      </section>
-    </section>
-
-    <section class="postman-panel pm-library">
-      <h2>Proyectos guardados</h2>
-      <div id="pmDraftList" class="pm-draft-list"><span class="pm-help">Cargando borradores...</span></div>
+      </form>
     </section>
   </main>
 
-  <script type="module" src="/app/js/postman.js?v=20260930-1"></script>
+  <script type="module" src="/app/js/postman.js?v=20261001-1"></script>
 </body>
 </html>
