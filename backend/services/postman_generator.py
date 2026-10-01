@@ -92,6 +92,7 @@ async def _read_upload(file: UploadFile) -> Dict[str, Any]:
 
                 workbook = load_workbook(BytesIO(raw), read_only=True, data_only=True)
                 lines: List[str] = []
+                seen_case_ids = set()
                 for sheet in workbook.worksheets:
                     rows = [[str(value or "").strip() for value in row] for row in sheet.iter_rows(values_only=True)]
                     rows = [row for row in rows if any(row)]
@@ -124,9 +125,16 @@ async def _read_upload(file: UploadFile) -> Dict[str, Any]:
                             identifier = cell(values, "caso", "test case")
                         if not identifier:
                             identifier = next((value for value in values if re.match(r"(?i)^(?:CP|TC|CASE)[\s#:_-]*\d+", value)), "")
+                        case_id_match = re.match(r"(?i)^(?:CP|TC|CASE)[\s#:_-]*\d+", identifier)
+                        if case_id_match:
+                            case_key = re.sub(r"[^A-Z0-9]", "", case_id_match.group(0).upper())
+                            if case_key in seen_case_ids:
+                                continue
+                            seen_case_ids.add(case_key)
                         if not scenario and "id y escenario" not in columns:
                             scenario = next((value for value in values if value and value != identifier and not re.match(r"(?i)^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s", value)), "")
                         identifier = re.sub(r"(?i)^caso\s+", "", identifier).strip()
+                        scenario_source = scenario
                         scenario = re.sub(rf"(?i)^\s*{re.escape(identifier)}\s*(?:[-:|]|\s)\s*", "", scenario).strip() if identifier else scenario
                         case_title = " - ".join(part for part in (identifier, scenario) if part)
                         if not case_title:
@@ -139,7 +147,8 @@ async def _read_upload(file: UploadFile) -> Dict[str, Any]:
                         inputs = cell(values, "valores de entrada", "datos de prueba", "datos", "entrada")
                         action = cell(values, "accion", "acción", "pasos", "steps")
                         expected = cell(values, "criterio final", "resultado esperado", "expected result", "expected")
-                        extra = [f"{headers[i]}: {value}" for i, value in enumerate(values) if value and i < len(headers) and value not in {identifier, scenario, endpoint, category, context, inputs, action, expected}]
+                        used_values = {identifier, scenario, scenario_source, endpoint, category, context, inputs, action, expected}
+                        extra = [f"{headers[i]}: {value}" for i, value in enumerate(values) if value and i < len(headers) and value not in used_values]
                         lines.extend([
                             f"CASO {case_title}",
                             f"Endpoint: {endpoint}",

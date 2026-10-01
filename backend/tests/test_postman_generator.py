@@ -112,6 +112,10 @@ Resultado esperado: Rechazo controlado.
         sheet.append(["Matriz de casos de prueba"])
         sheet.append(["ID", "Nombre del caso", "Endpoint", "Categoria", "Precondicion", "Datos de prueba", "Pasos", "Resultado esperado"])
         sheet.append(["CP-24", "CP-24 - Autenticacion sin contraseña", "POST /api/auth", "Negativo", "Usuario habilitado", "Omitir password", "Enviar request", "Rechazo controlado"])
+        detail = workbook.create_sheet("Detalle Requests")
+        detail.append(["Detalle exacto de requests por caso"])
+        detail.append(["ID", "Request", "Metodo", "Endpoint"])
+        detail.append(["CP-24", "1. Autenticar sin contraseña", "POST", "/api/auth"])
         buffer = BytesIO()
         workbook.save(buffer)
 
