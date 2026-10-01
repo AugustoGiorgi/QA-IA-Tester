@@ -1,5 +1,5 @@
 // frontend/js/chat_entendimiento.js
-import { authFetch, authHeaders } from './auth.js';
+import { authFetch, authHeaders } from './auth.js?v=20261001-2';
 
 const out = document.getElementById('out');
 const fileInput = document.getElementById('file');

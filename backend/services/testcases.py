@@ -1,7 +1,7 @@
 import logging
 import time
 from typing import List, Optional
-from services.ai import build_messages, complete
+from services.ai import build_messages, complete_async
 from services.markdown_table import first_table, normalize_first_table
 
 
@@ -265,18 +265,37 @@ def _is_invalid_followup_response(text: str) -> bool:
 
 
 # =============== Generación principal ===============
-def generate_testcases_markdown(doc_text: str, feedback_snippets: Optional[List[str]] = None) -> str:
+async def generate_testcases_markdown(
+    doc_text: str,
+    feedback_snippets: Optional[List[str]] = None,
+    request_id: str = "",
+) -> str:
     """
     Genera en una sola llamada para evitar continuaciones seriales que reenvian
     el documento y la tabla completa sin aportar cobertura consistente.
     """
     started_at = time.perf_counter()
     msgs = build_messages(TESTCASES_PROMPT, doc_text, feedback_snippets)
-    out = complete(msgs)
+    logger.info(
+        "testcase_generation_started request_id=%s document_chars=%d feedback_snippets=%d",
+        request_id,
+        len(doc_text),
+        len(feedback_snippets or []),
+    )
+    try:
+        out = await complete_async(msgs)
+    except Exception:
+        logger.exception(
+            "testcase_generation_failed request_id=%s elapsed_seconds=%.2f",
+            request_id,
+            time.perf_counter() - started_at,
+        )
+        raise
     out = normalize_first_table(out)
     rows = first_table(out).rows
     logger.info(
-        "testcase_generation_completed model_response_seconds=%.2f document_chars=%d feedback_snippets=%d generated_cases=%d",
+        "testcase_generation_completed request_id=%s model_response_seconds=%.2f document_chars=%d feedback_snippets=%d generated_cases=%d",
+        request_id,
         time.perf_counter() - started_at,
         len(doc_text),
         len(feedback_snippets or []),

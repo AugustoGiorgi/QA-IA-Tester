@@ -1,4 +1,4 @@
-import { authFetch, authHeaders, requireAuth } from './auth.js';
+import { authFetch, authHeaders, requireAuth } from './auth.js?v=20261001-2';
 
 requireAuth(['funcional']);
 

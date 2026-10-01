@@ -9,6 +9,36 @@ body {
   color: #e2e8f0;
 }
 
+.request-cancel-control {
+  position: fixed;
+  z-index: 10000;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px 10px 16px;
+  color: #e2e8f0;
+  background: #111c31;
+  border: 1px solid #35517c;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px #0008;
+  font-size: 14px;
+}
+
+.request-cancel-control span { line-height: 1.4; }
+.request-cancel-control button {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  color: #fca5a5;
+  background: #321c2a;
+  border: 1px solid #7f3348;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.request-cancel-control button:disabled { opacity: .7; cursor: wait; }
+
 body.app-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);

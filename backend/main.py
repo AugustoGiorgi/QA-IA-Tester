@@ -1,12 +1,15 @@
 # backend/main.py  (Python 3.8+)
+import asyncio
 import logging
 import os
 import re
+import secrets
+import time
 import traceback
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -305,13 +308,16 @@ async def chat_endpoint(payload: dict, user=Depends(require_roles("lider"))):
 # === 3) CASOS DE PRUEBA (Excel con plantilla) ===
 @app.post("/api/testcases")
 async def testcases(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user=Depends(require_roles("qa")),
 ):
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Subí un .docx")
+    request_id = secrets.token_hex(4)
     original_name = safe_filename(file.filename)
+    logger.info("testcase_request_received request_id=%s filename=%s", request_id, original_name)
     try:
         tmp_path = await save_upload(file, DATA_DIR / original_name)
     except Exception:
@@ -327,12 +333,37 @@ async def testcases(
     if not text or len(text.strip()) < 40:
         raise HTTPException(status_code=400, detail="No se pudo extraer texto suficiente del DOCX.")
 
+    feedback = get_recent_feedback_snippets(db)
+    logger.info(
+        "testcase_request_started request_id=%s filename=%s document_chars=%d feedback_snippets=%d",
+        request_id,
+        original_name,
+        len(text),
+        len(feedback),
+    )
     try:
-        table_md = await run_in_threadpool(generate_testcases_markdown, text, get_recent_feedback_snippets(db))
+        generation = asyncio.create_task(generate_testcases_markdown(text, feedback, request_id))
+        started_at = time.monotonic()
+        while not generation.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(generation), timeout=5)
+            except asyncio.TimeoutError:
+                if await request.is_disconnected():
+                    logger.warning("testcase_generation_cancelled request_id=%s elapsed_seconds=%.0f", request_id, time.monotonic() - started_at)
+                    generation.cancel()
+                    try:
+                        await generation
+                    except asyncio.CancelledError:
+                        pass
+                    raise HTTPException(status_code=499, detail="Generacion cancelada.")
+                elapsed = time.monotonic() - started_at
+                if int(elapsed) % 20 < 5:
+                    logger.warning("testcase_generation_still_running request_id=%s elapsed_seconds=%.0f", request_id, elapsed)
+        table_md = await generation
     except AIResponseError:
         raise
     except Exception as exc:
-        logger.error("Fallo generación IA de casos: %s\n%s", exc, traceback.format_exc())
+        logger.error("Fallo generación IA de casos request_id=%s filename=%s error=%s\n%s", request_id, original_name, type(exc).__name__, traceback.format_exc())
         raise HTTPException(
             status_code=502,
             detail=f"No se pudieron generar los casos con IA. Revisá configuración/cuota/modelo de OpenAI. Detalle: {type(exc).__name__}",

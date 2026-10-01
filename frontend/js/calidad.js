@@ -1,6 +1,6 @@
 // === Validación de Calidad — header afuera del recuadro, tabla adentro ===
 
-import { authFetch, authHeaders } from './auth.js';
+import { authFetch, authHeaders } from './auth.js?v=20261001-2';
 
 const form      = document.getElementById('form');
 const resultBox = document.getElementById('result');

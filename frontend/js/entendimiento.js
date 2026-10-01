@@ -1,4 +1,4 @@
-import { API_BASE, postFile } from './api.js';
+import { API_BASE, postFile } from './api.js?v=20261001-2';
 import { saveFileForTransfer, consumeTransferredFile, setFileInput } from './transfer.js';
 
 const form = document.getElementById('form');

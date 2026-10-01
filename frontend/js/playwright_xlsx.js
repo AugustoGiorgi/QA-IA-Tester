@@ -1,4 +1,4 @@
-import { authFetch, requireAuth } from './auth.js';
+import { authFetch, requireAuth } from './auth.js?v=20261001-2';
 
 requireAuth(['qa']);
 

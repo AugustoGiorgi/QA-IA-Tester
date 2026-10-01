@@ -1,4 +1,4 @@
-import { authFetch, authHeaders, getUser } from './auth.js';
+import { authFetch, authHeaders, getUser } from './auth.js?v=20261001-2';
 
 const currentUser = getUser();
 

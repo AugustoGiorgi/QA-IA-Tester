@@ -1,9 +1,11 @@
 import json
 import sys
+import asyncio
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from unittest.mock import AsyncMock
 
 import httpx
 from openai import OpenAI
@@ -17,6 +19,23 @@ def response(content='ok', reason='stop', refusal=None):
 
 
 class AICompatibilityTests(unittest.TestCase):
+    def test_async_completion_supports_cancelling_inflight_generation(self):
+        async def run():
+            started = asyncio.Event()
+
+            async def pending_request(**kwargs):
+                started.set()
+                await asyncio.Event().wait()
+
+            with patch.object(ai.async_client.chat.completions, 'create', new_callable=AsyncMock, side_effect=pending_request):
+                task = asyncio.create_task(ai.complete_async([{'role': 'user', 'content': 'test'}]))
+                await started.wait()
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+
+        asyncio.run(run())
+
     def test_gpt54_actual_sdk_payload_keeps_images_and_json(self):
         captured = []
         def handler(request):
