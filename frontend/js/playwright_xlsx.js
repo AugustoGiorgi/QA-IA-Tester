@@ -1,397 +1,170 @@
-import { authFetch, requireAuth } from './auth.js?v=20261001-2';
+import { authFetch, requireAuth } from './auth.js?v=20261005-1';
 
 requireAuth(['qa']);
 
 const $ = id => document.getElementById(id);
-let currentRecord = null;
-
-function setStatus(text, ok = false) {
-  const box = $('pwStatus');
-  if (!box) return;
-  box.textContent = text || '';
-  box.className = `pw-status ${ok ? 'ok' : ''}`;
-}
+let selectedFiles = [];
+let currentDraft = null;
 
 function escapeHtml(value = '') {
-  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function apiError(data, fallback) {
+function errorMessage(data, fallback) {
   if (typeof data?.detail === 'string') return data.detail;
-  if (Array.isArray(data?.detail)) {
-    return data.detail.map(item => item?.msg || JSON.stringify(item)).join(' ');
-  }
+  if (Array.isArray(data?.detail)) return data.detail.map(item => item?.msg || '').filter(Boolean).join(' ');
   return fallback;
 }
 
-function fmtDate(value) {
-  if (!value) return '';
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-AR');
+function setFiles(files) {
+  const allowed = /\.(docx|pdf|xlsx|csv|txt|md|json|yaml|yml|mp4|webm|mov|mkv)$/i;
+  const count = [...files].length;
+  selectedFiles = [...files].filter(file => allowed.test(file.name)).slice(0, 8);
+  $('filesInput').value = '';
+  $('fileList').innerHTML = selectedFiles.length
+    ? selectedFiles.map(file => `<span class="pw-file">${escapeHtml(file.name)}</span>`).join('')
+    : '<span class="pw-muted">Todavía no seleccionaste archivos</span>';
+  if (count > 8) $('formStatus').textContent = 'Se tomaron los primeros 8 archivos.';
 }
 
-function renderReviewList(id, items, emptyText, ok = false) {
-  const list = $(id);
-  const values = Array.isArray(items) ? items.filter(Boolean) : [];
-  list.classList.toggle('ok', ok || !values.length);
-  list.innerHTML = values.length
-    ? values.map(item => `<li>${escapeHtml(item)}</li>`).join('')
-    : `<li>${escapeHtml(emptyText)}</li>`;
+function countPending() {
+  const selectors = [...document.querySelectorAll('[data-kind="selector"]')];
+  const data = [...document.querySelectorAll('[data-kind="data"]')];
+  return [...selectors, ...data].filter(input => !input.value.trim() || /TODO|completar|pendiente/i.test(input.value)).length
+    + (currentDraft?.manual_checks?.length || 0);
 }
 
-function renderVariableEditor(id, values, kind) {
-  const container = $(id);
-  const entries = Object.entries(values || {});
-  container.innerHTML = entries.length
-    ? entries.map(([key, value]) => {
-      const text = String(value ?? '');
-      const todo = /todo/i.test(text);
-      return `
-        <div class="pw-variable-row">
-          <label title="${escapeHtml(key)}">${escapeHtml(key)}</label>
-          <input
-            class="${todo ? 'todo' : ''}"
-            data-variable-kind="${kind}"
-            data-variable-key="${escapeHtml(key)}"
-            value="${escapeHtml(text)}"
-            autocomplete="off"
-          />
-        </div>
-      `;
-    }).join('')
-    : '<span class="pw-muted">Sin variables detectadas.</span>';
-  container.querySelectorAll('input').forEach(input => {
-    input.addEventListener('input', () => input.classList.toggle('todo', /todo/i.test(input.value)));
-  });
+function renderVariables(draft) {
+  const selectorEntries = Object.entries(draft.selectors || {});
+  const dataEntries = Object.entries(draft.test_data || {});
+  const group = (title, kind, entries) => `
+    <details ${entries.some(([, value]) => !value || /TODO|completar|pendiente/i.test(String(value))) ? 'open' : ''}>
+      <summary>${title} (${entries.length})</summary>
+      <div class="pw-variable-list">${entries.length ? entries.map(([key, value]) => `
+        <div class="pw-variable"><label for="var-${kind}-${escapeHtml(key)}">${escapeHtml(key)}</label>
+          <input id="var-${kind}-${escapeHtml(key)}" data-kind="${kind}" data-key="${escapeHtml(key)}" class="${!value || /TODO|completar|pendiente/i.test(String(value)) ? 'todo' : ''}" value="${escapeHtml(value)}" autocomplete="off" />
+        </div>`).join('') : '<span class="pw-muted">No se detectaron variables.</span>'}</div>
+    </details>`;
+  $('variablesSection').innerHTML = `${group('Selectores a confirmar', 'selector', selectorEntries)}${group('Datos de prueba', 'data', dataEntries)}`;
+  $('variablesSection').querySelectorAll('input').forEach(input => input.addEventListener('input', () => {
+    input.classList.toggle('todo', !input.value.trim() || /TODO|completar|pendiente/i.test(input.value));
+    updatePendingCount();
+  }));
 }
 
-function collectVariables(kind) {
-  return Object.fromEntries(
-    [...document.querySelectorAll(`[data-variable-kind="${kind}"]`)]
-      .map(input => [input.dataset.variableKey, input.value]),
-  );
+function updatePendingCount() {
+  const count = countPending();
+  $('pendingCount').textContent = count;
+  $('resultNote').textContent = count
+    ? 'Completá los campos pendientes antes de usar el borrador. Los selectores no presentes en las fuentes quedan marcados para revisar.'
+    : 'Variables completas. Revisá la trazabilidad y validá el borrador en el ambiente real antes de ejecutarlo.';
 }
 
-function replaceObjectDeclaration(code, variableName, values) {
-  const declaration = new RegExp(`\\bconst\\s+${variableName}\\s*=\\s*\\{`);
-  const match = declaration.exec(code);
-  if (!match) return code;
-  const start = match.index;
-  const open = code.indexOf('{', match.index);
-  let depth = 0;
-  let quote = '';
-  let escaped = false;
-  let close = -1;
-  for (let index = open; index < code.length; index += 1) {
-    const char = code[index];
-    if (quote) {
-      if (escaped) escaped = false;
-      else if (char === '\\') escaped = true;
-      else if (char === quote) quote = '';
-      continue;
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char;
-      continue;
-    }
-    if (char === '{') depth += 1;
-    if (char === '}') {
-      depth -= 1;
-      if (depth === 0) {
-        close = index;
-        break;
-      }
-    }
-  }
-  if (close < 0) return code;
-  const end = code[close + 1] === ';' ? close + 2 : close + 1;
-  const replacement = `const ${variableName} = ${JSON.stringify(values, null, 2)};`;
-  return `${code.slice(0, start)}${replacement}${code.slice(end)}`;
+function renderDraft(draft) {
+  currentDraft = draft;
+  $('result').classList.remove('pw-hidden');
+  $('resultTitle').textContent = draft.project_name || 'Proyecto generado';
+  $('caseCount').textContent = draft.cases?.length || 0;
+  $('caseList').innerHTML = (draft.cases || []).map(item => `
+    <li class="pw-case"><span class="pw-case-id">${escapeHtml(item.id)}</span><div><div class="pw-case-title">${escapeHtml(item.title)}</div><div class="pw-case-source">${escapeHtml(item.source_reference || 'Origen no identificado')} · ${item.steps?.length || 0} pasos</div></div></li>
+  `).join('');
+  renderVariables(draft);
+  const pending = draft.manual_checks || [];
+  $('manualSection').innerHTML = pending.length
+    ? `<details open><summary>Revisión manual (${pending.length})</summary><ul class="pw-pending-list">${pending.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></details>`
+    : '<p class="pw-muted">No se detectaron dudas adicionales. Igual validá selectores y flujo contra la aplicación real.</p>';
+  $('downloadStatus').textContent = '';
+  updatePendingCount();
+  $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function applyVariablesToCode(showStatus = true) {
-  if (!currentRecord) return;
-  const selectors = collectVariables('selector');
-  const testData = collectVariables('data');
-  let code = $('pwCode').value;
-  code = replaceObjectDeclaration(code, 'selectors', selectors);
-  code = replaceObjectDeclaration(code, 'testData', testData);
-  $('pwCode').value = code;
-  currentRecord = { ...currentRecord, selectors, test_data: testData, generated_code: code };
-  if (showStatus) setStatus('Variables aplicadas al codigo. Guarda los cambios cuando termines.', true);
-}
-
-function switchTab(tab) {
-  document.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-  document.querySelectorAll('.pw-tab').forEach(section => section.classList.add('pw-hidden'));
-  $(`tab-${tab}`)?.classList.remove('pw-hidden');
-  if (tab === 'library') loadLibrary();
-}
-
-function setRecord(record) {
-  currentRecord = record;
-  $('pwCode').value = record?.generated_code || '';
-  const todoValues = [...Object.values(record?.selectors || {}), ...Object.values(record?.test_data || {})].filter(value => /todo|completar|valor-de-prueba/i.test(String(value))).length;
-  const state = $('pwArtifactStatus');
-  if (state) {
-    state.textContent = !record
-      ? 'Aun no hay una generacion.'
-      : `${record.review_status === 'needs_review' ? 'Borrador con revision pendiente' : 'Revision automatica completada'} · ${todoValues} datos/selectores por completar · No ejecutado contra el sistema real.`;
-    state.classList.toggle('ready', Boolean(record) && todoValues === 0 && record.review_status !== 'needs_review');
-  }
-  renderVariableEditor('pwSelectors', record?.selectors, 'selector');
-  renderVariableEditor('pwData', record?.test_data, 'data');
-  $('pwNotes').innerHTML = (record?.ai_notes || []).map(note => `<p>${escapeHtml(note)}</p>`).join('') || '<span class="pw-muted">Sin notas.</span>';
-  const covered = Array.isArray(record?.covered_steps) ? record.covered_steps : [];
-  $('pwCoverage').textContent = covered.length
-    ? `Pasos cubiertos por la revision: ${covered.join(', ')}`
-    : 'La cobertura no pudo determinarse automaticamente.';
-  renderReviewList(
-    'pwManualActions',
-    record?.manual_actions,
-    'No se detectaron pendientes manuales adicionales.',
-  );
-  renderReviewList(
-    'pwWarnings',
-    record?.warnings,
-    'La revision no detecto patrones de riesgo.',
-  );
-  $('pwSave').disabled = !record;
-  $('pwAudit').disabled = !record;
-  $('pwApplyVariables').disabled = !record;
-  $('pwCopy').disabled = !record;
-  $('pwDownload').disabled = !record;
-}
-
-async function generateAi(event) {
+async function generate(event) {
   event.preventDefault();
-  setStatus('Generando codigo...');
-  $('pwGenerate').disabled = true;
+  $('formStatus').className = 'pw-status';
+  if (!selectedFiles.length) {
+    $('formStatus').textContent = 'Seleccioná al menos un documento o video.';
+    return;
+  }
+  const button = $('generateButton');
+  button.disabled = true;
+  button.textContent = 'Analizando fuentes…';
+  $('formStatus').textContent = 'La IA está identificando casos y pendientes.';
+  $('result').classList.add('pw-hidden');
   try {
-    const fd = new FormData();
-    const mode = $('pwMode').value;
-    fd.append('mode', mode);
-    fd.append('title', $('pwTitle').value.trim());
-    fd.append('requirement_id', $('pwReq').value.trim());
-    fd.append('module', $('pwModule').value.trim());
-    fd.append('initial_url', $('pwUrl').value.trim());
-    fd.append('execution_role', $('pwRole').value.trim());
-    fd.append('description', mode === 'video' ? $('pwVideoDescription').value.trim() : $('pwDescription').value.trim());
-    fd.append('observations', $('pwObservations').value.trim());
-    fd.append('process_context', mode === 'video' ? $('pwProcessNotes').value.trim() : '');
-    fd.append('codegen', $('pwCodegen').value.trim());
-    fd.append('selector_context', $('pwSelectorContext').value.trim());
-    if (mode === 'video' && $('pwVideo').files.length) fd.append('video', $('pwVideo').files[0]);
-
-    const res = await authFetch('/api/playwright/ai/generate', { method: 'POST', body: fd });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(apiError(data, 'No se pudo generar el codigo.'));
-    setRecord(data.record);
-    const pending = Array.isArray(data.record?.manual_actions) ? data.record.manual_actions.length : 0;
-    setStatus(
-      data.record?.review_status === 'needs_review'
-        ? `Borrador generado y guardado. Hay ${pending} puntos para revisar antes de ejecutarlo.`
-        : 'Codigo generado, auditado y guardado en la biblioteca.',
-      true,
-    );
-    await loadLibrary(false);
-  } catch (err) {
-    setStatus(err.message || 'Error al generar.');
+    const form = new FormData();
+    form.append('project_name', $('projectName').value.trim());
+    form.append('initial_url', $('initialUrl').value.trim());
+    form.append('comments', $('comments').value.trim());
+    selectedFiles.forEach(file => form.append('files', file));
+    const response = await authFetch('/api/playwright/generate', { method: 'POST', body: form });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(errorMessage(data, 'No se pudo generar el proyecto.'));
+    renderDraft(data.draft);
+    $('formStatus').className = 'pw-status ok';
+    $('formStatus').textContent = `Listo: ${data.draft.cases.length} caso(s) preparados para revisar.`;
+  } catch (error) {
+    $('formStatus').textContent = error.name === 'AbortError' ? 'Se canceló la espera. El servidor podría seguir procesando.' : (error.message || 'Error al generar.');
   } finally {
-    $('pwGenerate').disabled = false;
+    button.disabled = false;
+    button.textContent = 'Generar proyecto';
   }
 }
 
-async function saveCurrent() {
-  if (!currentRecord) return false;
-  setStatus('Guardando cambios...');
+async function download() {
+  if (!currentDraft) return;
+  const button = $('downloadButton');
+  button.disabled = true;
+  $('downloadStatus').textContent = 'Preparando ZIP…';
   try {
-    const selectors = collectVariables('selector');
-    const testData = collectVariables('data');
-    const res = await authFetch(`/api/playwright/ai/generated/${currentRecord.id}`, {
-      method: 'PUT',
+    const selectors = Object.fromEntries([...document.querySelectorAll('[data-kind="selector"]')].map(input => [input.dataset.key, input.value]));
+    const testData = Object.fromEntries([...document.querySelectorAll('[data-kind="data"]')].map(input => [input.dataset.key, input.value]));
+    const response = await authFetch('/api/playwright/download', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        generated_code: $('pwCode').value,
-        selectors,
-        test_data: testData,
-      }),
+      body: JSON.stringify({ ...currentDraft, selectors, test_data: testData }),
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'No se pudo guardar.');
-    setRecord(data.record);
-    setStatus('Cambios guardados.', true);
-    await loadLibrary(false);
-    return true;
-  } catch (err) {
-    setStatus(err.message || 'Error al guardar.');
-    return false;
-  }
-}
-
-async function auditCurrent() {
-  if (!currentRecord) return;
-  setStatus('Guardando y auditando nuevamente el codigo...');
-  $('pwAudit').disabled = true;
-  try {
-    const selectors = collectVariables('selector');
-    const testData = collectVariables('data');
-    const saveRes = await authFetch(`/api/playwright/ai/generated/${currentRecord.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        generated_code: $('pwCode').value,
-        selectors,
-        test_data: testData,
-      }),
-    });
-    const saveData = await saveRes.json().catch(() => ({}));
-    if (!saveRes.ok) throw new Error(saveData.detail || 'No se pudo guardar antes de auditar.');
-    const res = await authFetch(`/api/playwright/ai/generated/${currentRecord.id}/audit`, { method: 'POST' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(apiError(data, 'No se pudo auditar el codigo.'));
-    setRecord(data.record);
-    setStatus(
-      data.record?.review_status === 'needs_review'
-        ? 'Auditoria completada. El codigo sigue como borrador y conserva los pendientes detectados.'
-        : 'Codigo corregido y recalificado por la auditoria automatica.',
-      true,
-    );
-    await loadLibrary(false);
-  } catch (err) {
-    setStatus(err.message || 'Error al auditar.');
-  } finally {
-    $('pwAudit').disabled = !currentRecord;
-  }
-}
-
-async function loadLibrary(showStatus = true) {
-  const list = $('pwList');
-  if (!list) return;
-  list.innerHTML = '<p class="pw-muted">Cargando pruebas...</p>';
-  try {
-    const res = await authFetch('/api/playwright/ai/generated');
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'No se pudo cargar la biblioteca.');
-    const records = data.records || [];
-    list.innerHTML = records.map(record => `
-      <article class="pw-item">
-        <div>
-          <strong>${escapeHtml(record.title)}</strong>
-          <span class="pw-muted">${escapeHtml(record.requirement_id || 'Sin REQ')} · ${escapeHtml(record.module || 'Sin modulo')} · ${escapeHtml(record.created_by)} · ${fmtDate(record.updated_at || record.created_at)}</span>
-        </div>
-        <div class="pw-actions">
-          <button class="pw-btn secondary" type="button" data-open="${escapeHtml(record.id)}">Abrir</button>
-          <button class="pw-btn secondary" type="button" data-download="${escapeHtml(record.id)}">Descargar</button>
-          <button class="pw-btn danger" type="button" data-delete="${escapeHtml(record.id)}">Eliminar</button>
-        </div>
-      </article>
-    `).join('') || '<p class="pw-muted">Todavia no hay pruebas guardadas.</p>';
-    list.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => openRecord(btn.dataset.open)));
-    list.querySelectorAll('[data-download]').forEach(btn => btn.addEventListener('click', () => downloadRecord(btn.dataset.download)));
-    list.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', () => deleteRecord(btn.dataset.delete)));
-    if (showStatus) setStatus('Biblioteca actualizada.', true);
-  } catch (err) {
-    list.innerHTML = `<p class="pw-status">${escapeHtml(err.message)}</p>`;
-  }
-}
-
-async function openRecord(id) {
-  const res = await authFetch(`/api/playwright/ai/generated/${id}`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) return alert(data.detail || 'No se pudo abrir.');
-  setRecord(data.record);
-  switchTab('ai');
-  setStatus('Prueba cargada desde biblioteca.', true);
-}
-
-async function downloadRecord(id = currentRecord?.id) {
-  if (!id) return;
-  if (currentRecord?.id === id && !(await saveCurrent())) return;
-  const res = await authFetch(`/api/playwright/ai/generated/${id}/download`);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    alert(data.detail || 'No se pudo descargar.');
-    return;
-  }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${(currentRecord?.title || 'playwright-test').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.zip`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function deleteRecord(id) {
-  if (!confirm('Eliminar esta prueba generada?')) return;
-  const res = await authFetch(`/api/playwright/ai/generated/${id}`, { method: 'DELETE' });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    alert(data.detail || 'No se pudo eliminar.');
-    return;
-  }
-  if (currentRecord?.id === id) setRecord(null);
-  await loadLibrary();
-}
-
-async function generateZip() {
-  const xlsx = $('xlsx');
-  const zip = $('zip');
-  const out = $('result');
-  const dl = $('btnDl');
-  const pill = $('statusPill');
-  dl.classList.add('pw-hidden');
-  dl.removeAttribute('href');
-  out.textContent = 'Generando proyecto...';
-  pill.textContent = '';
-
-  if (!xlsx.files.length) {
-    out.textContent = 'Subi un Excel (.xlsx) con los casos.';
-    return;
-  }
-
-  $('btnGen').disabled = true;
-  try {
-    const fd = new FormData();
-    fd.append('cases_xlsx', xlsx.files[0]);
-    if (zip.files.length) fd.append('selectors_zip', zip.files[0]);
-    const res = await authFetch('/api/playwright/build-xlsx-v2', { method: 'POST', body: fd });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail || 'Error al generar.');
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(errorMessage(data, 'No se pudo preparar el ZIP.'));
     }
-    const blob = await res.blob();
+    const blob = await response.blob();
     const url = URL.createObjectURL(blob);
-    dl.href = url;
-    dl.classList.remove('pw-hidden');
-    out.textContent = 'Hecho. Abrilo en VS Code y corre npm i, npx playwright install y npx playwright test.';
-    pill.textContent = 'Listo';
-  } catch (err) {
-    out.textContent = err.message || 'Fallo de red o CORS.';
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${(currentDraft.project_name || 'playwright').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-playwright.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    $('downloadStatus').className = 'pw-status ok';
+    $('downloadStatus').textContent = 'Proyecto descargado.';
+  } catch (error) {
+    $('downloadStatus').textContent = error.message || 'No se pudo descargar el proyecto.';
   } finally {
-    $('btnGen').disabled = false;
+    button.disabled = false;
   }
 }
 
-document.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
-$('pwMode')?.addEventListener('change', () => {
-  const video = $('pwMode').value === 'video';
-  $('videoMode').classList.toggle('hidden', !video);
-  $('textMode').classList.toggle('hidden', video);
-});
-$('aiForm')?.addEventListener('submit', generateAi);
-$('pwSave')?.addEventListener('click', saveCurrent);
-$('pwAudit')?.addEventListener('click', auditCurrent);
-$('pwApplyVariables')?.addEventListener('click', () => applyVariablesToCode());
-$('pwCopy')?.addEventListener('click', async () => {
-  await navigator.clipboard.writeText($('pwCode').value);
-  setStatus('Codigo copiado.', true);
-});
-$('pwDownload')?.addEventListener('click', () => downloadRecord());
-$('pwRefresh')?.addEventListener('click', () => loadLibrary());
-$('btnGen')?.addEventListener('click', generateZip);
+function newProject() {
+  currentDraft = null;
+  selectedFiles = [];
+  $('pwForm').reset();
+  $('fileList').innerHTML = '<span class="pw-muted">Todavía no seleccionaste archivos</span>';
+  $('formStatus').textContent = '';
+  $('result').classList.add('pw-hidden');
+  $('pwForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
-loadLibrary(false);
+$('pwForm').addEventListener('submit', generate);
+$('downloadButton').addEventListener('click', download);
+$('newButton').addEventListener('click', newProject);
+$('filesInput').addEventListener('change', event => setFiles(event.target.files));
+['dragenter', 'dragover'].forEach(name => $('dropZone').addEventListener(name, event => {
+  event.preventDefault();
+  $('dropZone').classList.add('dragging');
+}));
+['dragleave', 'drop'].forEach(name => $('dropZone').addEventListener(name, event => {
+  event.preventDefault();
+  $('dropZone').classList.remove('dragging');
+  if (name === 'drop') setFiles(event.dataTransfer.files);
+}));

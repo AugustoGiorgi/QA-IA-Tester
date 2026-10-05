@@ -37,9 +37,8 @@ from services.quality_records import router as quality_records_router
 from services.quality_template import evaluate_docx_against_template
 from services.reporting import build_markdown_report
 
-# Playwright desde Excel (service)
-from services.playwright_xlsx import router as playwright_xlsx_router
-from services.playwright_ai import router as playwright_ai_router
+# Playwright project builder (single flow)
+from services.playwright_builder import router as playwright_builder_router
 from services.postman_generator import router as postman_generator_router
 from services.karate_generator import router as karate_generator_router
 
@@ -503,11 +502,6 @@ async def download_docx(filename: str):
         filename=filename
     )
 
-@app.get("/api/ping-playwright-v2")
-def ping_playwright_v2():
-    return {"ok": True, "mode": "transpiler", "route": "/api/playwright/build-xlsx-v2"}
-
-app.include_router(playwright_xlsx_router, prefix="/api/playwright", dependencies=[Depends(require_roles("qa"))])
-app.include_router(playwright_ai_router, prefix="/api/playwright")
+app.include_router(playwright_builder_router, prefix="/api/playwright", dependencies=[Depends(require_roles("qa"))])
 app.include_router(postman_generator_router)
 app.include_router(karate_generator_router)

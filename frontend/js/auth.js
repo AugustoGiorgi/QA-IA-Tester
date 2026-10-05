@@ -12,7 +12,7 @@ export function authHeaders(extra = {}) { return { ...extra }; }
 
 const cancellablePaths = [
   '/api/testcases', '/api/explain', '/api/quality', '/api/postman/analyze',
-  '/api/karate/generate', '/api/playwright/ai/generate', '/api/playwright/build-xlsx-v2',
+  '/api/karate/generate', '/api/playwright/generate',
   '/api/reco-chat/start', '/api/reco-chat/ask', '/api/chat/start', '/api/chat/ask',
   '/api/functional/coach/start', '/api/functional/coach/message', '/api/functional/coach/confirm', '/api/functional/coach/finish',
   '/api/chat-proyectos',
@@ -25,7 +25,6 @@ function isCancelable(url, options) {
   const path = new URL(url, window.location.origin).pathname;
   return method !== 'GET' && (
     cancellablePaths.some(item => path === item || path.startsWith(`${item}/`))
-    || (path.startsWith('/api/playwright/ai/generated/') && path.endsWith('/audit'))
   );
 }
 
