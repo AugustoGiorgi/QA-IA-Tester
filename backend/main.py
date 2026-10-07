@@ -41,6 +41,7 @@ from services.reporting import build_markdown_report
 from services.playwright_builder import router as playwright_builder_router
 from services.postman_generator import router as postman_generator_router
 from services.karate_generator import router as karate_generator_router
+from services.evidence_generator import router as evidence_generator_router
 
 # ⬇️ Chat de recomendaciones (calidad)
 
@@ -505,3 +506,4 @@ async def download_docx(filename: str):
 app.include_router(playwright_builder_router, prefix="/api/playwright", dependencies=[Depends(require_roles("qa"))])
 app.include_router(postman_generator_router)
 app.include_router(karate_generator_router)
+app.include_router(evidence_generator_router)

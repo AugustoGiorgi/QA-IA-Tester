@@ -13,6 +13,7 @@ export function authHeaders(extra = {}) { return { ...extra }; }
 const cancellablePaths = [
   '/api/testcases', '/api/explain', '/api/quality', '/api/postman/analyze',
   '/api/karate/generate', '/api/playwright/generate',
+  '/api/evidence/sessions', '/api/evidence/sessions/', '/api/evidence/images/',
   '/api/reco-chat/start', '/api/reco-chat/ask', '/api/chat/start', '/api/chat/ask',
   '/api/functional/coach/start', '/api/functional/coach/message', '/api/functional/coach/confirm', '/api/functional/coach/finish',
   '/api/chat-proyectos',

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Evidencias QA</title>
+  <link rel="stylesheet" href="/app/dashboard.css?v=20261007-1" />
+  <link rel="stylesheet" href="/app/evidencias.css?v=20261007-1" />
+</head>
+<body class="module-page evidence-page">
+  <main class="module-container evidence-container">
+    <section class="ev-session-bar" aria-label="Ejecuciones guardadas">
+      <label for="savedSessions">Ejecución</label>
+      <select id="savedSessions"><option value="">Nueva ejecución</option></select>
+      <button id="newSession" class="ev-button secondary" type="button">Nueva</button>
+    </section>
+
+    <section id="startView" class="ev-start">
+      <form id="startForm" class="ev-start-form">
+        <div class="ev-form-grid">
+          <label>Proyecto<input id="projectName" name="project_name" maxlength="180" placeholder="Nombre del proyecto" required /></label>
+          <label>Requerimiento <span class="ev-optional">Opcional</span><input id="requirement" name="requirement" maxlength="220" placeholder="ID o nombre del requerimiento" /></label>
+          <label>Ambiente <span class="ev-optional">Opcional</span><input id="environment" name="environment" maxlength="120" placeholder="QA, UAT, Producción..." /></label>
+        </div>
+        <label id="excelDrop" class="ev-drop" for="excelFile">
+          <input id="excelFile" type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
+          <span class="ev-drop-icon" aria-hidden="true">↑</span>
+          <strong>Seleccionar planilla de casos</strong>
+          <span class="ev-muted">Excel XLS o XLSX</span>
+          <span id="excelName" class="ev-file-name">Todavía no seleccionaste una planilla</span>
+        </label>
+        <div class="ev-form-actions">
+          <button id="loadWorkbook" class="ev-button primary" type="submit">Cargar casos</button>
+          <span id="startStatus" class="ev-status" role="status"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="sessionView" class="ev-session" hidden>
+      <header class="ev-session-head">
+        <div class="ev-session-title">
+          <h2 id="sessionTitle"></h2>
+          <p id="sessionMeta" class="ev-muted"></p>
+        </div>
+        <div class="ev-session-actions">
+          <input id="updatedExcel" type="file" accept=".xls,.xlsx" hidden />
+          <button id="replaceExcel" class="ev-button secondary" type="button">Actualizar Excel</button>
+          <button id="generateReport" class="ev-button primary" type="button">Generar informe Word</button>
+        </div>
+      </header>
+
+      <div id="changeNotice" class="ev-notice" hidden></div>
+      <div class="ev-metrics" id="metrics"></div>
+
+      <div class="ev-case-toolbar">
+        <label class="ev-search-label">Buscar<input id="caseSearch" type="search" placeholder="ID o nombre del caso" /></label>
+        <label>Mostrar<select id="caseFilter">
+          <option value="all">Todos los casos</option>
+          <option value="no-evidence">Sin evidencia</option>
+          <option value="ok">OK</option>
+          <option value="error">Error</option>
+          <option value="blocked">Bloqueado</option>
+        </select></label>
+        <div class="ev-progress-wrap"><span id="evidenceProgressText"></span><progress id="evidenceProgress" max="100" value="0"></progress></div>
+      </div>
+
+      <div id="caseList" class="ev-case-list"></div>
+      <div id="emptyCases" class="ev-empty" hidden>No hay casos que coincidan con la búsqueda.</div>
+    </section>
+
+    <dialog id="imagePreview" class="ev-preview-dialog">
+      <button id="closePreview" class="ev-preview-close" type="button" aria-label="Cerrar vista previa">×</button>
+      <img id="previewImage" alt="Vista ampliada de evidencia" />
+      <p id="previewCaption"></p>
+    </dialog>
+  </main>
+  <script type="module" src="/app/js/evidencias.js?v=20261007-1"></script>
+</body>
+</html>
