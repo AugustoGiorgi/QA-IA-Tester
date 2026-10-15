@@ -17,6 +17,7 @@ const tools = [
   { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20261001-3' },
   { id: 'karate', roles: ['qa'], label: 'Karate', href: '/app/karate.html?v=20260930-1' },
   { id: 'evidencias', roles: ['qa'], label: 'Evidencias QA', href: '/app/evidencias.html?v=20261007-1' },
+  { id: 'sql-query', roles: ['qa'], label: 'Consultas SQL', href: '/app/sql-query.html?v=20261015-1' },
 ];
 
 

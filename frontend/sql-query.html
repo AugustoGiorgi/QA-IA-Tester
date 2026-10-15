@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Consultas SQL</title>
+  <link rel="stylesheet" href="/app/dashboard.css?v=20261015-1" />
+  <link rel="stylesheet" href="/app/sql-query.css?v=20261015-1" />
+</head>
+<body class="module-page sql-page">
+  <main class="module-container sql-container">
+    <header class="sql-toolbar">
+      <div class="sql-tabs" role="tablist" aria-label="Secciones de consultas SQL">
+        <button type="button" class="sql-tab active" data-tab="chat" role="tab" aria-selected="true">Chat</button>
+        <button type="button" class="sql-tab" data-tab="knowledge" role="tab" aria-selected="false">Conocimiento</button>
+      </div>
+      <button id="schemaToggle" class="sql-button secondary" type="button">Configurar esquema</button>
+    </header>
+
+    <section id="schemaPanel" class="sql-panel sql-schema" hidden>
+      <div class="sql-panel-head">
+        <div><h2>Catálogo Oracle</h2><p>Importá los dos CSV de metadatos. No se conecta a la base ni carga registros de negocio. El esquema queda en el servidor compartido y se envía a la IA para preparar consultas; usá solo información autorizada.</p></div>
+        <button id="schemaClose" class="sql-icon-button" type="button" aria-label="Cerrar configuración">×</button>
+      </div>
+      <form id="schemaForm" class="sql-schema-form">
+        <label>CSV de columnas <input id="columnsFile" type="file" accept=".csv,text/csv" required /></label>
+        <label>CSV de relaciones <input id="relationsFile" type="file" accept=".csv,text/csv" required /></label>
+        <button class="sql-button primary" type="submit">Importar esquema</button>
+      </form>
+      <p id="schemaStatus" class="sql-status" role="status"></p>
+    </section>
+
+    <section id="chatView" class="sql-view">
+      <div class="sql-chat-toolbar">
+        <label for="threadSelect">Conversación</label>
+        <select id="threadSelect" aria-label="Conversación guardada"></select>
+        <button id="newThread" class="sql-button secondary" type="button">Nueva consulta</button>
+        <span id="catalogBadge" class="sql-badge">Revisando esquema…</span>
+      </div>
+      <div id="chatNotice" class="sql-notice" role="status"></div>
+      <div id="messages" class="sql-messages" aria-live="polite"></div>
+      <form id="messageForm" class="sql-composer">
+        <label for="userMessage">Consulta o respuesta</label>
+        <textarea id="userMessage" maxlength="8000" rows="3" placeholder="Ej.: pólizas del ramo 25 que estén vigentes al día de hoy" required></textarea>
+        <div class="sql-composer-footer">
+          <span>La consulta se genera para revisión. No se ejecuta contra Oracle.</span>
+          <button id="sendMessage" class="sql-button primary" type="submit">Enviar</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="knowledgeView" class="sql-view" hidden>
+      <div class="sql-panel-head">
+        <div><h2>Conocimiento compartido</h2><p>Reglas de negocio reutilizables para que el chat no vuelva a preguntar lo mismo.</p></div>
+        <button id="addKnowledge" class="sql-button primary" type="button">Agregar definición</button>
+      </div>
+      <form id="knowledgeForm" class="sql-knowledge-form" hidden>
+        <label>Concepto<input id="knowledgeTerm" maxlength="180" placeholder="Ej.: póliza vigente" required /></label>
+        <label>Definición<textarea id="knowledgeDefinition" maxlength="3000" rows="3" placeholder="Describí la regla de negocio que debe reutilizarse" required></textarea></label>
+        <div class="sql-form-actions"><button id="cancelKnowledge" class="sql-button secondary" type="button">Cancelar</button><button class="sql-button primary" type="submit">Guardar</button></div>
+      </form>
+      <div id="knowledgeList" class="sql-knowledge-list"></div>
+    </section>
+  </main>
+  <script type="module" src="/app/js/sql-query.js?v=20261015-1"></script>
+</body>
+</html>

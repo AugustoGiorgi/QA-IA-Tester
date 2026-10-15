@@ -1,0 +1,56 @@
+.sql-page { overflow: visible !important; }
+.sql-container { display: grid; gap: 12px; padding: 12px !important; }
+.sql-container button { width: auto; }
+.sql-toolbar, .sql-chat-toolbar, .sql-composer-footer, .sql-panel-head, .sql-form-actions { display: flex; align-items: center; gap: 10px; }
+.sql-toolbar { justify-content: space-between; border-bottom: 1px solid var(--shell-line); padding-bottom: 10px; }
+.sql-tabs { display: flex; gap: 6px; }
+.sql-tab, .sql-button, .sql-icon-button { min-height: 36px !important; padding: 0 12px !important; border: 1px solid #2b3c59 !important; border-radius: 6px !important; color: #dbeafe !important; background: #111d33 !important; font: inherit; font-size: .84rem; font-weight: 700; cursor: pointer; }
+.sql-tab.active, .sql-button.primary { color: #fff !important; border-color: #2563eb !important; background: #2563eb !important; }
+.sql-button:disabled { opacity: .55; cursor: wait; }
+.sql-icon-button { width: 34px !important; padding: 0 !important; font-size: 1.2rem; }
+.sql-panel { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--shell-line); border-radius: 7px; background: rgba(17,24,39,.88); }
+.sql-panel[hidden], .sql-view[hidden], .sql-knowledge-form[hidden] { display: none !important; }
+.sql-panel-head { justify-content: space-between; align-items: flex-start; }
+.sql-panel h2 { margin: 0 0 4px; color: #fff; font-size: 1rem; }
+.sql-panel p, .sql-composer-footer span { margin: 0; color: #94a3b8; font-size: .82rem; line-height: 1.5; }
+.sql-schema-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 10px; }
+.sql-schema-form label, .sql-knowledge-form label, .sql-composer label { display: grid; gap: 6px; color: #dbeafe; font-size: .84rem; font-weight: 700; }
+.sql-schema-form input, .sql-knowledge-form input, .sql-knowledge-form textarea, .sql-composer textarea, .sql-chat-toolbar select { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #2b3c59; border-radius: 6px; color: #f8fafc; background: #0b1528; font: inherit; font-size: .86rem; }
+.sql-schema-form input[type=file] { min-height: 40px; }
+.sql-schema-form button { justify-self: start; }
+.sql-status { min-height: 1.25em; }
+.sql-view { display: grid; gap: 12px; }
+.sql-chat-toolbar { flex-wrap: wrap; }
+.sql-chat-toolbar label { color: #cbd5e1; font-size: .82rem; font-weight: 700; }
+.sql-chat-toolbar select { flex: 1 1 240px; max-width: 520px; min-height: 38px; }
+.sql-badge { margin-left: auto; padding: 6px 9px; border: 1px solid #334155; border-radius: 999px; color: #bfdbfe; background: #111d33; font-size: .75rem; }
+.sql-notice { color: #fca5a5; font-size: .84rem; }
+.sql-notice:empty { display: none; }
+.sql-messages { display: grid; gap: 10px; }
+.sql-message { max-width: 100%; padding: 12px; border: 1px solid #253044; border-radius: 7px; background: rgba(17,24,39,.78); }
+.sql-message[data-role=user] { border-color: rgba(59,130,246,.38); background: rgba(30,58,138,.16); }
+.sql-message strong { display: block; margin-bottom: 5px; color: #bfdbfe; font-size: .77rem; }
+.sql-message p { margin: 0; color: #e2e8f0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.sql-message pre { max-width: 100%; margin: 10px 0 0; padding: 12px; overflow-x: auto; border: 1px solid #253044; border-radius: 6px; color: #dbeafe; background: #070d18; font: .82rem/1.55 Consolas, "Courier New", monospace; white-space: pre; }
+.sql-message .sql-copy { margin-top: 8px; }
+.sql-assumptions { margin: 9px 0 0; padding-left: 18px; color: #cbd5e1; font-size: .8rem; }
+.sql-composer { display: grid; gap: 7px; padding: 12px; border: 1px solid var(--shell-line); border-radius: 7px; background: rgba(17,24,39,.82); }
+.sql-composer textarea { resize: vertical; min-height: 82px; }
+.sql-composer-footer { justify-content: space-between; }
+.sql-knowledge-form { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--shell-line); border-radius: 6px; background: #0d1729; }
+.sql-knowledge-form textarea { resize: vertical; }
+.sql-form-actions { justify-content: flex-end; }
+.sql-knowledge-list { display: grid; gap: 8px; }
+.sql-knowledge-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 12px; border: 1px solid #253044; border-radius: 7px; background: rgba(17,24,39,.78); }
+.sql-knowledge-item h3 { margin: 0 0 5px; color: #dbeafe; font-size: .9rem; }
+.sql-knowledge-item p { margin: 0; color: #cbd5e1; font-size: .83rem; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.sql-knowledge-actions { display: flex; align-items: flex-start; gap: 6px; }
+.sql-empty { padding: 22px 12px; border: 1px dashed #334155; border-radius: 6px; color: #94a3b8; text-align: center; font-size: .85rem; }
+@media (max-width: 640px) {
+  .sql-container { padding: 8px !important; }
+  .sql-schema-form { grid-template-columns: 1fr; }
+  .sql-badge { margin-left: 0; }
+  .sql-composer-footer { align-items: flex-start; flex-direction: column; }
+  .sql-knowledge-item { grid-template-columns: 1fr; }
+  .sql-knowledge-actions { justify-content: flex-end; }
+}

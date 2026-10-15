@@ -42,6 +42,7 @@ from services.playwright_builder import router as playwright_builder_router
 from services.postman_generator import router as postman_generator_router
 from services.karate_generator import router as karate_generator_router
 from services.evidence_generator import router as evidence_generator_router
+from services.sql_assistant import router as sql_assistant_router
 
 # ⬇️ Chat de recomendaciones (calidad)
 
@@ -507,3 +508,4 @@ app.include_router(playwright_builder_router, prefix="/api/playwright", dependen
 app.include_router(postman_generator_router)
 app.include_router(karate_generator_router)
 app.include_router(evidence_generator_router)
+app.include_router(sql_assistant_router, dependencies=[Depends(require_roles("qa"))])
