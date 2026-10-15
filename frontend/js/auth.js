@@ -17,7 +17,7 @@ const cancellablePaths = [
   '/api/reco-chat/start', '/api/reco-chat/ask', '/api/chat/start', '/api/chat/ask',
   '/api/functional/coach/start', '/api/functional/coach/message', '/api/functional/coach/confirm', '/api/functional/coach/finish',
   '/api/chat-proyectos',
-  '/api/sql-assistant/threads',
+  '/api/sql-assistant/conversation/messages',
 ];
 let activeCancelableRequest = null;
 let cancelNoticeTimer = null;

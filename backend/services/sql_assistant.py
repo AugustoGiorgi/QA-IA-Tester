@@ -5,12 +5,11 @@ import io
 import json
 import re
 import unicodedata
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from pymongo import DESCENDING
 
@@ -24,7 +23,6 @@ SCHEMA_COLUMNS = "SQLAssistantSchemaColumns"
 SCHEMA_RELATIONS = "SQLAssistantSchemaRelations"
 KNOWLEDGE = "SQLAssistantKnowledge"
 THREADS = "SQLAssistantThreads"
-MAX_CSV_BYTES = 15 * 1024 * 1024
 MAX_SCHEMA_ROWS = 100000
 MAX_THREAD_MESSAGES = 100
 MAX_MESSAGE_CHARS = 8000
@@ -40,10 +38,10 @@ Nunca te conectes a una base ni afirmes que ejecutaste una consulta. Tu salida s
 Usá exclusivamente las tablas, columnas, relaciones y definiciones de negocio incluidas en el contexto. No inventes nombres ni reglas.
 Si falta una definición funcional que cambia el resultado (por ejemplo, qué significa que una póliza esté vigente), hacé una sola pregunta concreta por turno y no generes SQL todavía.
 No vuelvas a preguntar algo respondido en el historial o definido en la base de conocimiento.
-Cuando la persona responda una pregunta sobre una definición general reutilizable, devolvé knowledge con term y definition. También hacelo si el último mensaje del usuario declara explícitamente una regla general (por ejemplo, "vigente significa...") junto con su consulta. No guardes como conocimiento datos puntuales de una búsqueda, fechas, números, ejemplos de pólizas ni valores de prueba.
+Las respuestas del chat normal nunca se guardan como conocimiento. Si una definición funcional no está en el contexto, preguntala y usá la respuesta solamente para completar esta conversación. Las definiciones reutilizables se agregan por separado desde la sección Conocimiento.
 Cuando tengas información suficiente, devolvé una consulta Oracle de solo lectura, de una única sentencia SELECT, con columnas explícitas, joins respaldados por las relaciones del catálogo y variables bind (:nombre) para valores que la persona deba completar. No uses SELECT * ni DML/DDL. No uses WITH.
 Si el pedido es ambiguo pero no bloquea una consulta segura, exponé la suposición en assumptions. No agregues datos reales ni valores sensibles.
-Si hacés una pregunta para definir una regla general, completá knowledge_question_term con el nombre breve de esa regla. Si el usuario la aclara, guardala en knowledge usando la regla completa y el término de negocio; no la guardes hasta tener esa respuesta. Respondé exclusivamente JSON con esta forma: {"status":"question"|"ready","reply":"texto breve en español","sql":"SELECT... o cadena vacía","assumptions":["..."],"knowledge_question_term":"concepto general preguntado o cadena vacía","knowledge":{"term":"...","definition":"..."} o null}."""
+Si necesitás una aclaración, preguntá una sola cosa a la vez. Respondé exclusivamente JSON con esta forma: {"status":"question"|"ready","reply":"texto breve en español","sql":"SELECT... o cadena vacía","assumptions":["..."]}."""
 
 
 class MessageIn(BaseModel):
@@ -88,15 +86,6 @@ def _csv_records(raw: bytes, expected: set, kind: str) -> List[Dict[str, str]]:
     if not rows:
         raise HTTPException(status_code=400, detail="El CSV de {} está vacío.".format(kind))
     return rows
-
-
-async def _read_csv(file: UploadFile, expected: set, kind: str) -> List[Dict[str, str]]:
-    if not (file.filename or "").lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="{} debe ser un archivo .csv.".format(kind.capitalize()))
-    raw = await file.read(MAX_CSV_BYTES + 1)
-    if len(raw) > MAX_CSV_BYTES:
-        raise HTTPException(status_code=413, detail="Cada CSV debe pesar menos de 15 MB.")
-    return _csv_records(raw, expected, kind)
 
 
 def _schema_table(column_rows: Sequence[Dict[str, str]]) -> Dict[str, Any]:
@@ -210,11 +199,6 @@ def _validate_select(sql: str) -> str:
     return cleaned
 
 
-def _explicit_business_definition(message: str) -> bool:
-    text = _normalize(message)
-    return bool(re.search(r"\b(significa|se define|se considera|se entiende por|es cuando|se encuentra vigente|para considerar|para que .* vigente)\b", text) or re.search(r"\b(?:vigente|vigencia|poliza|siniestro|cobertura|regla)\s+(?:es|significa|se define|se considera)\b", text))
-
-
 async def _ensure_indexes() -> None:
     db = _db()
     await db[KNOWLEDGE].create_index([("term_key", 1)], unique=True)
@@ -227,44 +211,6 @@ async def schema_status(user: Dict[str, Any] = Depends(current_user)):
     if not meta:
         return {"loaded": False, "table_count": 0, "column_count": 0, "relation_count": 0}
     return {"loaded": True, "table_count": meta.get("table_count", 0), "column_count": meta.get("column_count", 0), "relation_count": meta.get("relation_count", 0), "loaded_at": meta.get("loaded_at")}
-
-
-@router.post("/schema")
-async def upload_schema(
-    columns_file: UploadFile = File(...),
-    relations_file: UploadFile = File(...),
-    user: Dict[str, Any] = Depends(current_user),
-):
-    column_rows = await _read_csv(columns_file, COLUMN_HEADERS, "columnas")
-    relation_rows = await _read_csv(relations_file, RELATION_HEADERS, "relaciones")
-    tables = _schema_table(column_rows)
-    version = uuid.uuid4().hex
-    columns = []
-    for row in column_rows:
-        if not row.get("ESQUEMA") or not row.get("TABLA") or not row.get("COLUMNA"):
-            continue
-        columns.append({"catalog_version": version, "owner": row["ESQUEMA"], "table": row["TABLA"], "column": row["COLUMNA"], "type": row.get("TIPO", ""), "nullable": row.get("ADMITE_NULOS", ""), "position": row.get("POSICION", "")})
-    relations = []
-    for row in relation_rows:
-        if not row.get("TABLA") or not row.get("COLUMNA") or not row.get("TABLA_REFERENCIADA") or not row.get("COLUMNA_REFERENCIADA"):
-            continue
-        relations.append({"catalog_version": version, "owner": row.get("ESQUEMA", ""), "table": row["TABLA"], "constraint": row.get("CLAVE_FORANEA", ""), "position": row.get("POSICION", ""), "column": row["COLUMNA"], "ref_owner": row.get("ESQUEMA_REFERENCIADO", ""), "ref_table": row["TABLA_REFERENCIADA"], "ref_constraint": row.get("CLAVE_REFERENCIADA", ""), "ref_column": row["COLUMNA_REFERENCIADA"]})
-    db = _db()
-    previous = await db[SCHEMA_META].find_one({"_id": "current"})
-    try:
-        if columns:
-            await db[SCHEMA_COLUMNS].insert_many(columns, ordered=False)
-        if relations:
-            await db[SCHEMA_RELATIONS].insert_many(relations, ordered=False)
-        await db[SCHEMA_META].replace_one({"_id": "current"}, {"_id": "current", "catalog_version": version, "table_count": len(tables["tables"]), "column_count": len(columns), "relation_count": len(relations), "loaded_at": _now(), "source_columns": columns_file.filename, "source_relations": relations_file.filename}, upsert=True)
-    except Exception:
-        await db[SCHEMA_COLUMNS].delete_many({"catalog_version": version})
-        await db[SCHEMA_RELATIONS].delete_many({"catalog_version": version})
-        raise
-    if previous and previous.get("catalog_version"):
-        await db[SCHEMA_COLUMNS].delete_many({"catalog_version": previous["catalog_version"]})
-        await db[SCHEMA_RELATIONS].delete_many({"catalog_version": previous["catalog_version"]})
-    return {"loaded": True, "table_count": len(tables["tables"]), "column_count": len(columns), "relation_count": len(relations)}
 
 
 @router.get("/knowledge")
@@ -317,50 +263,25 @@ async def delete_knowledge(knowledge_id: str, user: Dict[str, Any] = Depends(cur
     return {"ok": True}
 
 
-@router.post("/threads")
-async def create_thread(user: Dict[str, Any] = Depends(current_user)):
+@router.get("/conversation")
+async def get_shared_conversation(user: Dict[str, Any] = Depends(current_user)):
+    collection = _db()[THREADS]
     now = _now()
-    result = await _db()[THREADS].insert_one({"title": "Nueva consulta", "messages": [], "created_at": now, "updated_at": now})
-    return {"thread": {"id": str(result.inserted_id), "title": "Nueva consulta", "messages": []}}
+    await collection.update_one({"_id": "shared"}, {"$setOnInsert": {"title": "Chat SQL del equipo", "messages": [], "created_at": now, "updated_at": now}}, upsert=True)
+    thread = await collection.find_one({"_id": "shared"})
+    return {"thread": _public_thread(thread, include_messages=True)}
 
 
-@router.get("/threads")
-async def list_threads(user: Dict[str, Any] = Depends(current_user)):
-    rows = await _db()[THREADS].find({}).sort("updated_at", DESCENDING).limit(50).to_list(length=50)
-    return {"threads": [_public_thread(row) for row in rows]}
-
-
-@router.get("/threads/{thread_id}")
-async def get_thread(thread_id: str, user: Dict[str, Any] = Depends(current_user)):
-    if not ObjectId.is_valid(thread_id):
-        raise HTTPException(status_code=400, detail="ID de conversación inválido.")
-    row = await _db()[THREADS].find_one({"_id": ObjectId(thread_id)})
-    if not row:
-        raise HTTPException(status_code=404, detail="No se encontró la conversación.")
-    return {"thread": _public_thread(row, include_messages=True)}
-
-
-@router.delete("/threads/{thread_id}")
-async def delete_thread(thread_id: str, user: Dict[str, Any] = Depends(current_user)):
-    if not ObjectId.is_valid(thread_id):
-        raise HTTPException(status_code=400, detail="ID de conversación inválido.")
-    result = await _db()[THREADS].delete_one({"_id": ObjectId(thread_id)})
-    if not result.deleted_count:
-        raise HTTPException(status_code=404, detail="No se encontró la conversación.")
-    return {"ok": True}
-
-
-@router.post("/threads/{thread_id}/messages")
-async def send_message(thread_id: str, payload: MessageIn, user: Dict[str, Any] = Depends(current_user)):
-    if not ObjectId.is_valid(thread_id):
-        raise HTTPException(status_code=400, detail="ID de conversación inválido.")
+@router.post("/conversation/messages")
+async def send_message(payload: MessageIn, user: Dict[str, Any] = Depends(current_user)):
     db = _db()
-    thread = await db[THREADS].find_one({"_id": ObjectId(thread_id)})
-    if not thread:
-        raise HTTPException(status_code=404, detail="No se encontró la conversación.")
+    thread_id = "shared"
+    now = _now()
+    await db[THREADS].update_one({"_id": thread_id}, {"$setOnInsert": {"title": "Chat SQL del equipo", "messages": [], "created_at": now, "updated_at": now}}, upsert=True)
+    thread = await db[THREADS].find_one({"_id": thread_id})
     meta = await db[SCHEMA_META].find_one({"_id": "current"})
     if not meta:
-        raise HTTPException(status_code=409, detail="Primero cargá el catálogo de columnas y relaciones de Oracle.")
+        raise HTTPException(status_code=409, detail="El catálogo SQL fijo todavía no está disponible. Contactá al administrador.")
 
     message = _clean(payload.message, MAX_MESSAGE_CHARS)
     if not message:
@@ -404,25 +325,16 @@ async def send_message(thread_id: str, payload: MessageIn, user: Dict[str, Any] 
     elif status != "question":
         raise HTTPException(status_code=502, detail="La respuesta de IA no indicó si necesita una aclaración o está lista.")
 
-    knowledge_saved = None
-    last_message = messages[-1] if messages else {}
-    prior_term = _clean(last_message.get("knowledge_question_term"), 180) if last_message.get("role") == "assistant" else ""
-    candidate = result.get("knowledge") if isinstance(result.get("knowledge"), dict) else None
-    if (prior_term or _explicit_business_definition(message)) and candidate and _clean(candidate.get("term"), 180) and _clean(candidate.get("definition"), 3000):
-        knowledge_saved = await _save_knowledge(candidate["term"], candidate["definition"], source="chat")
-        reply = (reply + "\n\nGuardé esta definición en el conocimiento compartido: {}.").format(knowledge_saved["term"])
-
     now = _now()
     user_message = {"role": "user", "content": message, "created_at": now}
     assistant_message = {
         "role": "assistant", "content": reply, "status": status,
         "sql": sql, "assumptions": assumptions,
-        "knowledge_question_term": _clean(result.get("knowledge_question_term"), 180) if status == "question" else "",
         "created_at": now,
     }
     new_messages = messages + [user_message, assistant_message]
     title = thread.get("title") or (message[:70] + ("…" if len(message) > 70 else ""))
     if title == "Nueva consulta":
         title = message[:70] + ("…" if len(message) > 70 else "")
-    await db[THREADS].update_one({"_id": ObjectId(thread_id)}, {"$set": {"title": title, "messages": new_messages, "updated_at": now}})
-    return {"thread": {"id": thread_id, "title": title, "messages": new_messages}, "message": assistant_message, "knowledge_saved": knowledge_saved}
+    await db[THREADS].update_one({"_id": thread_id}, {"$set": {"title": title, "messages": new_messages, "updated_at": now}})
+    return {"thread": {"id": thread_id, "title": title, "messages": new_messages}, "message": assistant_message}

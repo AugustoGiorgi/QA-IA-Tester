@@ -1,4 +1,4 @@
-.sql-page { overflow: visible !important; }
+.sql-page { overflow: visible !important; font-family: system-ui, Arial, sans-serif; }
 .sql-container { display: grid; gap: 12px; padding: 12px !important; }
 .sql-container button { width: auto; }
 .sql-toolbar, .sql-chat-toolbar, .sql-composer-footer, .sql-panel-head, .sql-form-actions { display: flex; align-items: center; gap: 10px; }
@@ -13,6 +13,7 @@
 .sql-panel-head { justify-content: space-between; align-items: flex-start; }
 .sql-panel h2 { margin: 0 0 4px; color: #fff; font-size: 1rem; }
 .sql-panel p, .sql-composer-footer span { margin: 0; color: #94a3b8; font-size: .82rem; line-height: 1.5; }
+.sql-disclosure { margin: 0; color: #94a3b8; font-size: .78rem; line-height: 1.45; }
 .sql-schema-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 10px; }
 .sql-schema-form label, .sql-knowledge-form label, .sql-composer label { display: grid; gap: 6px; color: #dbeafe; font-size: .84rem; font-weight: 700; }
 .sql-schema-form input, .sql-knowledge-form input, .sql-knowledge-form textarea, .sql-composer textarea, .sql-chat-toolbar select { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #2b3c59; border-radius: 6px; color: #f8fafc; background: #0b1528; font: inherit; font-size: .86rem; }

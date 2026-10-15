@@ -4,39 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Consultas SQL</title>
-  <link rel="stylesheet" href="/app/dashboard.css?v=20261015-1" />
-  <link rel="stylesheet" href="/app/sql-query.css?v=20261015-1" />
+  <link rel="stylesheet" href="/app/dashboard.css?v=20261015-3" />
+  <link rel="stylesheet" href="/app/sql-query.css?v=20261015-3" />
 </head>
 <body class="module-page sql-page">
   <main class="module-container sql-container">
     <header class="sql-toolbar">
       <div class="sql-tabs" role="tablist" aria-label="Secciones de consultas SQL">
         <button type="button" class="sql-tab active" data-tab="chat" role="tab" aria-selected="true">Chat</button>
-        <button type="button" class="sql-tab" data-tab="knowledge" role="tab" aria-selected="false">Conocimiento</button>
+        <button type="button" class="sql-tab" data-tab="knowledge" role="tab" aria-selected="false">Conocimiento funcional</button>
       </div>
-      <button id="schemaToggle" class="sql-button secondary" type="button">Configurar esquema</button>
+      <span id="catalogBadge" class="sql-badge">Revisando catálogo…</span>
     </header>
 
-    <section id="schemaPanel" class="sql-panel sql-schema" hidden>
-      <div class="sql-panel-head">
-        <div><h2>Catálogo Oracle</h2><p>Importá los dos CSV de metadatos. No se conecta a la base ni carga registros de negocio. El esquema queda en el servidor compartido y se envía a la IA para preparar consultas; usá solo información autorizada.</p></div>
-        <button id="schemaClose" class="sql-icon-button" type="button" aria-label="Cerrar configuración">×</button>
-      </div>
-      <form id="schemaForm" class="sql-schema-form">
-        <label>CSV de columnas <input id="columnsFile" type="file" accept=".csv,text/csv" required /></label>
-        <label>CSV de relaciones <input id="relationsFile" type="file" accept=".csv,text/csv" required /></label>
-        <button class="sql-button primary" type="submit">Importar esquema</button>
-      </form>
-      <p id="schemaStatus" class="sql-status" role="status"></p>
-    </section>
-
     <section id="chatView" class="sql-view">
-      <div class="sql-chat-toolbar">
-        <label for="threadSelect">Conversación</label>
-        <select id="threadSelect" aria-label="Conversación guardada"></select>
-        <button id="newThread" class="sql-button secondary" type="button">Nueva consulta</button>
-        <span id="catalogBadge" class="sql-badge">Revisando esquema…</span>
-      </div>
+      <p class="sql-disclosure">Catálogo interno compartido. Solo se envían a la IA los metadatos relevantes para la consulta; nunca se conecta ni se leen registros de Oracle.</p>
       <div id="chatNotice" class="sql-notice" role="status"></div>
       <div id="messages" class="sql-messages" aria-live="polite"></div>
       <form id="messageForm" class="sql-composer">
@@ -51,7 +33,7 @@
 
     <section id="knowledgeView" class="sql-view" hidden>
       <div class="sql-panel-head">
-        <div><h2>Conocimiento compartido</h2><p>Reglas de negocio reutilizables para que el chat no vuelva a preguntar lo mismo.</p></div>
+        <div><h2>Conocimiento funcional del equipo</h2><p>Agregá acá definiciones que deban reutilizarse. Las respuestas del chat SQL normal no se guardan como conocimiento.</p></div>
         <button id="addKnowledge" class="sql-button primary" type="button">Agregar definición</button>
       </div>
       <form id="knowledgeForm" class="sql-knowledge-form" hidden>
@@ -62,6 +44,6 @@
       <div id="knowledgeList" class="sql-knowledge-list"></div>
     </section>
   </main>
-  <script type="module" src="/app/js/sql-query.js?v=20261015-1"></script>
+  <script type="module" src="/app/js/sql-query.js?v=20261015-3"></script>
 </body>
 </html>
