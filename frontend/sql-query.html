@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Consultas SQL</title>
-  <link rel="stylesheet" href="/app/dashboard.css?v=20261015-3" />
-  <link rel="stylesheet" href="/app/sql-query.css?v=20261015-3" />
+  <link rel="stylesheet" href="/app/dashboard.css?v=20261015-4" />
+  <link rel="stylesheet" href="/app/sql-query.css?v=20261015-4" />
 </head>
 <body class="module-page sql-page">
   <main class="module-container sql-container">
@@ -14,18 +14,15 @@
         <button type="button" class="sql-tab active" data-tab="chat" role="tab" aria-selected="true">Chat</button>
         <button type="button" class="sql-tab" data-tab="knowledge" role="tab" aria-selected="false">Conocimiento funcional</button>
       </div>
-      <span id="catalogBadge" class="sql-badge">Revisando catálogo…</span>
     </header>
 
     <section id="chatView" class="sql-view">
-      <p class="sql-disclosure">Catálogo interno compartido. Solo se envían a la IA los metadatos relevantes para la consulta; nunca se conecta ni se leen registros de Oracle.</p>
       <div id="chatNotice" class="sql-notice" role="status"></div>
       <div id="messages" class="sql-messages" aria-live="polite"></div>
       <form id="messageForm" class="sql-composer">
-        <label for="userMessage">Consulta o respuesta</label>
-        <textarea id="userMessage" maxlength="8000" rows="3" placeholder="Ej.: pólizas del ramo 25 que estén vigentes al día de hoy" required></textarea>
+        <label for="userMessage">Escribí la consulta</label>
+        <textarea id="userMessage" maxlength="8000" rows="3" placeholder="Escribí la consulta…" required></textarea>
         <div class="sql-composer-footer">
-          <span>La consulta se genera para revisión. No se ejecuta contra Oracle.</span>
           <button id="sendMessage" class="sql-button primary" type="submit">Enviar</button>
         </div>
       </form>
@@ -44,6 +41,6 @@
       <div id="knowledgeList" class="sql-knowledge-list"></div>
     </section>
   </main>
-  <script type="module" src="/app/js/sql-query.js?v=20261015-3"></script>
+  <script type="module" src="/app/js/sql-query.js?v=20261015-4"></script>
 </body>
 </html>

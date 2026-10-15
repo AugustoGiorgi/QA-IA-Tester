@@ -19,7 +19,7 @@ function showNotice(message = '') { $('chatNotice').textContent = message; }
 function renderMessages() {
   const host = $('messages');
   if (!state.messages.length) {
-    host.innerHTML = `<div class="sql-empty">Escribí lo que necesitás consultar. Si falta una regla de negocio, el chat te va a pedir esa aclaración.</div>`;
+    host.innerHTML = '';
     return;
   }
   host.innerHTML = state.messages.map((message, index) => {
@@ -39,11 +39,8 @@ function renderMessages() {
 async function loadCatalogStatus() {
   const data = await request('/api/sql-assistant/status');
   state.catalogLoaded = Boolean(data.loaded);
-  $('catalogBadge').textContent = data.loaded
-    ? `Catálogo listo · ${data.table_count} tablas · ${data.column_count} columnas`
-    : 'Catálogo sin configurar';
-  $('messageForm').hidden = !state.catalogLoaded;
-  if (!state.catalogLoaded) showNotice('El catálogo SQL debe quedar precargado por el administrador en la base compartida.');
+  $('sendMessage').disabled = !state.catalogLoaded;
+  if (!state.catalogLoaded) showNotice('No se pudo cargar el catálogo.');
 }
 
 async function loadConversation() {
