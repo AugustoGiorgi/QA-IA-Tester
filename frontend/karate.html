@@ -2,77 +2,79 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Karate · QA Doc Analyzer</title>
-  <link rel="stylesheet" href="/app/styles.css?v=20261001-2" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Karate</title>
+  <link rel="stylesheet" href="/app/dashboard.css?v=20261001-2" />
   <style>
-    :root { color-scheme: dark; --k-bg:#0b1220; --k-panel:#111b2c; --k-field:#08111f; --k-line:#26364f; --k-blue:#2563eb; --k-muted:#91a0b7; }
-    * { box-sizing: border-box; }
-    body { margin:0; background:var(--k-bg); color:#e8eef8; font:14px/1.5 Inter,Segoe UI,Arial,sans-serif; }
-    .k-shell { width:min(1480px,100%); margin:0 auto; padding:26px; }
-    .k-head { display:flex; justify-content:space-between; align-items:end; gap:16px; padding-bottom:18px; border-bottom:1px solid var(--k-line); }
-    h1 { margin:0; font-size:28px; } h2 { margin:0; font-size:17px; } h3 { margin:8px 0; font-size:15px; }
-    .k-muted { color:var(--k-muted); }
-    .k-grid { display:grid; grid-template-columns:minmax(320px,.76fr) minmax(480px,1.24fr); gap:18px; margin-top:20px; align-items:start; }
-    .k-panel { min-width:0; padding:20px; border:1px solid var(--k-line); border-radius:8px; background:var(--k-panel); }
-    .k-form { display:grid; gap:15px; }
-    .k-form label,.k-case label,.k-var-list label { display:grid; gap:6px; color:#d7e1f0; font-weight:700; }
-    .k-form input,.k-form textarea,.k-case select,.k-case textarea,.k-var-list input { width:100%; min-height:42px; padding:10px 12px; border:1px solid var(--k-line); border-radius:6px; background:var(--k-field); color:#eef4ff; font:inherit; }
-    .k-form textarea,.k-case textarea { min-height:90px; resize:vertical; }
-    .k-drop { display:grid; gap:6px; padding:18px; border:1px dashed #3971d5; border-radius:8px; background:rgba(37,99,235,.08); cursor:pointer; }
-    .k-drop input { border:0; min-height:auto; padding:8px 0 0; background:transparent; }
-    .k-btn { min-height:42px; padding:0 16px; border:1px solid #3678f5; border-radius:7px; background:var(--k-blue); color:white; font-weight:800; cursor:pointer; }
-    .k-btn:disabled { opacity:.55; cursor:wait; }
-    .k-secondary { border-color:var(--k-line); background:#15233b; }
-    .k-status { min-height:22px; color:#fca5a5; }
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body.module-page { background:#0b1220; color:#f8fafc; font-family:Inter,Segoe UI,Arial,sans-serif; }
+    body.module-page .module-container { padding:16px; }
+    .k-form { width:min(900px,100%); margin:0 auto; display:grid; gap:16px; padding:8px 0 24px; }
+    .k-drop { min-height:178px; display:grid; place-items:center; gap:10px; padding:22px; border:2px dashed #4b76aa; border-radius:8px; background:#0c1729; text-align:center; cursor:pointer; }
+    .k-drop:hover, .k-drop.dragover { border-color:#93c5fd; background:#12264a; }
+    .k-drop input { display:none; }
+    .k-icon { width:54px; height:54px; display:grid; place-items:center; border-radius:8px; background:#2563eb; color:#fff; font-size:1.8rem; line-height:1; }
+    .k-drop strong { color:#f8fafc; font-size:1rem; }
+    .k-hint { color:#94a3b8; font-size:.85rem; }
+    .k-files { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; max-width:100%; color:#94a3b8; font-size:.82rem; }
+    .k-file { max-width:100%; overflow-wrap:anywhere; border:1px solid #37537b; border-radius:6px; padding:5px 8px; background:#14294b; color:#dbeafe; }
+    .k-form label:not(.k-drop) { display:grid; gap:8px; color:#f8fafc; font-weight:700; }
+    .k-form input:not([type="file"]), .k-form textarea { width:100%; min-height:42px; padding:10px 12px; border:1px solid #34465e; border-radius:8px; background:#08111f; color:#f8fafc; font:inherit; }
+    .k-form textarea { min-height:92px; resize:vertical; }
+    .k-form input:focus, .k-form textarea:focus { outline:2px solid #60a5fa; outline-offset:1px; }
+    .k-primary, .k-secondary { min-height:44px; padding:0 16px; border-radius:8px; font:inherit; font-weight:800; cursor:pointer; }
+    .k-primary { border:1px solid #60a5fa; background:#2563eb; color:#fff; }
+    .k-primary:hover { background:#3474f5; }
+    .k-secondary { border:1px solid #37537b; background:#13213b; color:#dbeafe; }
+    .k-secondary:hover { border-color:#60a5fa; }
+    .k-primary:disabled { opacity:.55; cursor:wait; }
+    .k-status { min-height:22px; color:#fecaca; font-weight:700; }
     .k-status.ok { color:#86efac; }
-    .k-empty { display:grid; min-height:280px; place-items:center; text-align:center; color:var(--k-muted); }
-    .k-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:16px 0; }
-    .k-metric { padding:12px; border:1px solid var(--k-line); border-radius:7px; background:#0b1526; }
-    .k-metric span,.k-metric strong { display:block; } .k-metric span { color:var(--k-muted); font-size:12px; } .k-metric strong { margin-top:4px; font-size:22px; }
-    .k-state { margin:14px 0; padding:12px; border-left:3px solid #f59e0b; background:rgba(245,158,11,.08); color:#fde68a; }
-    .k-case-list { display:grid; gap:10px; max-height:620px; overflow:auto; }
-    .k-case { display:grid; gap:10px; padding:14px; border:1px solid var(--k-line); border-radius:7px; background:#0b1526; }
-    .k-case p { margin:0; color:var(--k-muted); white-space:pre-wrap; }
-    .k-inline { display:flex; align-items:center; gap:8px; }
-    .k-inline input { width:16px; height:16px; accent-color:var(--k-blue); }
-    .k-var-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px; }
-    .k-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
-    .k-library { margin-top:18px; }
-    .k-drafts { display:grid; gap:8px; margin-top:12px; }
-    .k-draft { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--k-line); border-radius:7px; background:#0b1526; }
-    .k-library { margin-top:18px; }
-    .k-drafts { display:grid; gap:8px; margin-top:12px; }
-    .k-draft { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--k-line); border-radius:7px; background:#0b1526; }
-    .k-warnings { margin-top:16px; color:#fcd34d; }
-    @media(max-width:900px) { .k-shell { padding:16px; } .k-grid { grid-template-columns:1fr; } .k-var-list,.k-metrics { grid-template-columns:1fr; } .k-head { align-items:start; flex-direction:column; } }
+    .k-result { display:grid; gap:14px; padding-top:14px; border-top:1px solid #34465e; }
+    .k-result[hidden], .k-pending[hidden], .k-result button[hidden], .k-result details[hidden] { display:none; }
+    .k-result > strong { color:#bbf7d0; }
+    .k-actions { display:flex; flex-wrap:wrap; gap:10px; }
+    .k-pending { display:grid; gap:9px; color:#dbeafe; font-size:.87rem; }
+    .k-pending ul { margin:0; padding-left:20px; line-height:1.55; overflow-wrap:anywhere; }
+    .k-pending summary { cursor:pointer; color:#cbd5e1; }
+    @media (max-width:600px) { .k-drop { min-height:155px; padding:16px; } .k-actions { display:grid; } }
   </style>
 </head>
-<body>
-  <main class="k-shell">
-    <header class="k-head"><div><h1>Karate</h1><span class="k-muted">Generador de automatizaciones API</span></div></header>
-    <div class="k-grid">
-      <form id="karateForm" class="k-panel k-form">
-        <label>Nombre del proyecto<input id="kProject" required placeholder="Propuesta Caucion API" /></label>
-        <label class="k-drop"><strong>Documentos de API y collection</strong><span class="k-muted">OpenAPI, Postman, cURL, DOCX, PDF, YAML, JSON o texto</span><input id="kSources" type="file" multiple accept=".json,.yaml,.yml,.md,.txt,.docx,.pdf,.xml,.curl,.http,.csv,.xlsx" /></label>
-        <label class="k-drop"><strong>Excel de casos (opcional)</strong><span class="k-muted">Se compara con los casos detectados en los documentos</span><input id="kCases" type="file" accept=".xlsx,.csv,.txt" /></label>
-        <label>Comentarios y reglas confirmadas<textarea id="kNotes" placeholder="Agrega reglas de negocio, dependencias entre requests o contexto que no figure en los archivos"></textarea></label>
-        <button id="kGenerate" class="k-btn" type="submit">Analizar y preparar proyecto</button>
-        <div id="kStatus" class="k-status" role="status"></div>
-      </form>
-      <section class="k-panel">
-        <div id="kResult" class="k-empty">Carga documentos para analizar los endpoints y preparar los escenarios.</div>
+<body class="module-page">
+  <main class="module-container">
+    <form id="karateForm" class="k-form">
+      <label class="k-drop" id="kDropzone">
+        <span class="k-icon" aria-hidden="true">↓</span>
+        <strong>Soltá acá los archivos o seleccioná desde tu equipo</strong>
+        <span class="k-hint">Collections o requests JSON, OpenAPI, cURL, funcional DOCX/PDF y casos XLSX/CSV</span>
+        <span class="k-files" id="kFiles">Archivos todavía no seleccionados</span>
+        <input id="kSources" type="file" multiple accept=".json,.yaml,.yml,.txt,.md,.curl,.http,.docx,.pdf,.xlsx,.csv" />
+      </label>
+      <label for="kProject">Nombre del proyecto
+        <input id="kProject" type="text" maxlength="180" placeholder="Ej.: Propuesta Caución - regresión" required />
+      </label>
+      <label for="kNotes">Comentarios o indicaciones
+        <textarea id="kNotes" rows="3" placeholder="Reglas de negocio, datos a parametrizar o aclaraciones"></textarea>
+      </label>
+      <button id="kGenerate" class="k-primary" type="submit">Generar proyecto Karate</button>
+      <div id="kStatus" class="k-status" role="status" aria-live="polite"></div>
+      <section id="kResult" class="k-result" hidden>
+        <strong>Proyecto generado</strong>
+        <div class="k-actions">
+          <button id="kDownload" class="k-primary" type="button">Descargar ZIP</button>
+          <button id="kNew" class="k-secondary" type="button">Nuevo proyecto</button>
+        </div>
+        <div id="kPending" class="k-pending" hidden>
+          <strong id="kMissingSummary"></strong>
+          <ul id="kMissingList"></ul>
+          <details id="kMoreMissing" hidden><summary id="kMoreMissingSummary"></summary><ul id="kMoreMissingList"></ul></details>
+          <button id="kQuery" class="k-secondary" type="button" hidden>Conseguir query para datos</button>
+          <details id="kManual" hidden><summary>Revisiones manuales</summary><ul id="kManualList"></ul></details>
+        </div>
       </section>
-    </div>
-    <section class="k-panel k-library">
-      <h2>Proyectos guardados</h2>
-      <div id="kDrafts" class="k-drafts"><span class="k-muted">Cargando borradores...</span></div>
-    </section>
-    <section class="k-panel k-library">
-      <h2>Proyectos guardados</h2>
-      <div id="kDrafts" class="k-drafts"><span class="k-muted">Cargando borradores...</span></div>
-    </section>
+    </form>
   </main>
-  <script type="module" src="/app/js/karate.js?v=20261001-2"></script>
+  <script type="module" src="/app/js/karate.js?v=20261019-3"></script>
 </body>
 </html>

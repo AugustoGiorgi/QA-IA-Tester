@@ -1422,7 +1422,7 @@ def _tests_for_endpoint(endpoint: Dict[str, Any], case: Optional[Dict[str, Any]]
     return "\n".join(lines)
 
 
-def _build_artifacts(model: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+def _build_artifacts(model: Dict[str, Any], include_case_refs: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
     associations = model.get("associations", [])
     cases = model.get("test_cases", [])
     case_by_id = {case.get("id"): case for case in cases}
@@ -1532,6 +1532,9 @@ def _build_artifacts(model: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, A
                 "request": request,
                 "event": events,
             }
+            if include_case_refs:
+                item["_qa_endpoint_id"] = endpoint.get("id")
+                item["_qa_case_id"] = case.get("id") if case else None
             if case and opaque_inputs and not any(_case_omits(case, field) for field in re.findall(r"[A-Za-z0-9_]+", json.dumps(template, ensure_ascii=False))):
                 issues.append(f"{case_name}: revisar cómo aplicar los datos de prueba: {opaque_inputs[:120]}")
             unmatched = [key for key in inputs if key not in used_inputs]
