@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
@@ -16,6 +17,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from pymongo import DESCENDING
+from starlette.concurrency import run_in_threadpool
 
 from services.activity import record_activity
 from services.auth import _db, current_user
@@ -29,6 +31,12 @@ OUTPUT_NAME = "qa_postman_package"
 POSTMAN_SCHEMA = "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 TEXT_EXTENSIONS = {".txt", ".md", ".json", ".yaml", ".yml", ".xml", ".csv", ".curl", ".http"}
+MAX_SOURCE_BYTES = 20 * 1024 * 1024
+MAX_SOURCE_TEXT_CHARS = 2_000_000
+MAX_SPREADSHEET_ROWS = 10_000
+MAX_SOURCE_FILES = 12
+MAX_TOTAL_SOURCE_BYTES = 40 * 1024 * 1024
+MAX_TOTAL_SOURCE_TEXT_CHARS = 4_000_000
 SECRET_RE = re.compile(
     r"(?i)(bearer\s+[a-z0-9._\-]{12,}|api[_-]?key\s*[:=]\s*[^\s,;]{8,}|"
     r"password\s*[:=]\s*[^\s,;]{4,}|secret\s*[:=]\s*[^\s,;]{6,}|"
@@ -74,28 +82,45 @@ def _source_ref(name: str, kind: str, location: str = "") -> Dict[str, str]:
 
 async def _read_upload(file: UploadFile) -> Dict[str, Any]:
     filename = safe_filename(file.filename or "fuente.txt")
+    raw = await file.read(MAX_SOURCE_BYTES + 1)
+    if len(raw) > MAX_SOURCE_BYTES:
+        raise HTTPException(status_code=413, detail=f"El archivo {filename} supera el límite de 20 MB.")
+    return await run_in_threadpool(_decode_upload, filename, raw)
+
+
+def _decode_upload(filename: str, raw: bytes) -> Dict[str, Any]:
     suffix = Path(filename).suffix.lower()
-    raw = await file.read()
     text = ""
     parse_warning = ""
     try:
         if suffix == ".docx":
-            tmp = Path(__file__).resolve().parent.parent / "data" / f"postman_tmp_{datetime.utcnow().timestamp()}_{filename}"
-            tmp.write_bytes(raw)
+            tmp_dir = Path(__file__).resolve().parent.parent / "data"
+            tmp_dir.mkdir(exist_ok=True)
+            with tempfile.NamedTemporaryFile(mode="wb", dir=tmp_dir, prefix="postman_", suffix=".docx", delete=False) as temporary:
+                temporary.write(raw)
+                tmp = Path(temporary.name)
             try:
                 text = docx_to_text(str(tmp))
             finally:
                 tmp.unlink(missing_ok=True)
         elif suffix == ".xlsx":
+            workbook = None
             try:
                 from openpyxl import load_workbook
 
                 workbook = load_workbook(BytesIO(raw), read_only=True, data_only=True)
                 lines: List[str] = []
                 seen_case_ids = set()
+                total_rows = 0
                 for sheet in workbook.worksheets:
-                    rows = [[str(value or "").strip() for value in row] for row in sheet.iter_rows(values_only=True)]
-                    rows = [row for row in rows if any(row)]
+                    rows = []
+                    for row in sheet.iter_rows(values_only=True):
+                        total_rows += 1
+                        if total_rows > MAX_SPREADSHEET_ROWS:
+                            raise HTTPException(status_code=413, detail=f"El Excel {filename} supera las {MAX_SPREADSHEET_ROWS} filas.")
+                        values = [str(value).strip() if value is not None else "" for value in row]
+                        if any(values):
+                            rows.append(values)
                     if not rows:
                         continue
                     known_headers = {
@@ -161,8 +186,13 @@ async def _read_upload(file: UploadFile) -> Dict[str, Any]:
                             "",
                         ])
                 text = "\n".join(lines)
+            except HTTPException:
+                raise
             except Exception:
                 parse_warning = "No se pudo leer el Excel. Verifica que sea .xlsx valido."
+            finally:
+                if workbook is not None:
+                    workbook.close()
         elif suffix == ".pdf":
             try:
                 from pypdf import PdfReader
@@ -175,12 +205,16 @@ async def _read_upload(file: UploadFile) -> Dict[str, Any]:
             text = raw.decode("utf-8", errors="replace")
         else:
             parse_warning = f"Formato {suffix} recibido; se conservara como fuente pero no se pudo leer como texto."
+    except HTTPException:
+        raise
     except Exception as exc:
         parse_warning = f"No se pudo leer {filename}: {type(exc).__name__}."
+    if len(text) > MAX_SOURCE_TEXT_CHARS:
+        raise HTTPException(status_code=413, detail=f"El contenido de {filename} es demasiado grande para analizarlo completo.")
     return {
         "name": filename,
         "extension": suffix,
-        "text": _clean(text, 300000),
+        "text": _clean(text, MAX_SOURCE_TEXT_CHARS),
         "size": len(raw),
         "warning": parse_warning,
     }
@@ -1262,10 +1296,29 @@ async def analyze_postman_sources(
     user: Dict[str, Any] = Depends(current_user),
 ):
     _require_qa(user)
-    sources = [await _read_upload(file) for file in (files or [])]
+    if len(manual_text) > MAX_TOTAL_SOURCE_TEXT_CHARS:
+        raise HTTPException(status_code=413, detail="El texto pegado es demasiado grande para analizarlo completo.")
+    if len(files or []) + bool(test_cases_file and test_cases_file.filename) > MAX_SOURCE_FILES:
+        raise HTTPException(status_code=413, detail=f"Cargá como máximo {MAX_SOURCE_FILES} archivos.")
+    sources = []
+    total_bytes = 0
+    total_text_chars = len(manual_text)
+    for file in files or []:
+        source = await _read_upload(file)
+        total_bytes += source["size"]
+        total_text_chars += len(source["text"])
+        if total_bytes > MAX_TOTAL_SOURCE_BYTES:
+            raise HTTPException(status_code=413, detail="El conjunto de archivos supera el límite de 40 MB.")
+        if total_text_chars > MAX_TOTAL_SOURCE_TEXT_CHARS:
+            raise HTTPException(status_code=413, detail="El conjunto de documentos contiene demasiado texto para analizarlo completo.")
+        sources.append(source)
     case_source = None
     if test_cases_file and test_cases_file.filename:
         case_source = await _read_upload(test_cases_file)
+        if total_bytes + case_source["size"] > MAX_TOTAL_SOURCE_BYTES:
+            raise HTTPException(status_code=413, detail="El conjunto de archivos supera el límite de 40 MB.")
+        if total_text_chars + len(case_source["text"]) > MAX_TOTAL_SOURCE_TEXT_CHARS:
+            raise HTTPException(status_code=413, detail="El conjunto de documentos contiene demasiado texto para analizarlo completo.")
         case_source["is_cases_file"] = True
         sources.append(case_source)
     if not sources and not manual_text.strip():

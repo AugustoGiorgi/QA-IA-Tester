@@ -1,11 +1,37 @@
 import logging
 import time
 from typing import List, Optional
-from services.ai import build_messages, complete_async
+from services.ai import AIResponseError, build_messages, complete_async
 from services.markdown_table import first_table, normalize_first_table
 
 
 logger = logging.getLogger("qa_doc_analyzer.testcases")
+
+
+def case_rows_from_markdown(markdown: str) -> List[dict]:
+    table = first_table(markdown)
+    headers = set(table.headers)
+    required = {"objetivo de la prueba", "funcionalidad", "resultado esperado", "observaciones"}
+    if not table.rows or not required.issubset(headers) or not ({"número", "numero"} & headers):
+        raise AIResponseError("La IA no devolvió una tabla de casos válida. Intentá generar nuevamente.")
+    rows = []
+    for row_map in table.rows:
+        objective = row_map.get("objetivo de la prueba", "").strip()
+        expected = row_map.get("resultado esperado", "").strip()
+        if not objective or not expected:
+            raise AIResponseError("La IA devolvió casos incompletos. Intentá generar nuevamente.")
+        rows.append({
+            "Caso de Prueba": row_map.get("número", row_map.get("numero", "")) or str(len(rows) + 1),
+            "Objetivo": objective,
+            "Paso a Paso": "",
+            "Resultado Esperado": expected,
+            "Precondiciones": "",
+            "Prioridad": "",
+            "Datos de Prueba": "",
+            "Funcionalidad": row_map.get("funcionalidad", ""),
+            "Observaciones": row_map.get("observaciones", ""),
+        })
+    return rows
 
 # =============== Prompt QA Senior ===============
 TESTCASES_PROMPT = (

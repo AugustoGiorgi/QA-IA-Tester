@@ -3,6 +3,7 @@ import sys
 import unittest
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -13,6 +14,7 @@ from services.postman_generator import (  # noqa: E402
     build_intermediate_model,
     validate_model,
 )
+from fastapi import HTTPException  # noqa: E402
 
 
 class AsyncUpload:
@@ -20,11 +22,31 @@ class AsyncUpload:
         self.filename = filename
         self._data = data
 
-    async def read(self):
-        return self._data
+    async def read(self, size=-1):
+        return self._data if size < 0 else self._data[:size]
 
 
 class PostmanGeneratorTests(unittest.TestCase):
+    def test_rejects_oversized_source_before_parsing(self):
+        import asyncio
+
+        with patch("services.postman_generator.MAX_SOURCE_BYTES", 4), self.assertRaises(HTTPException) as raised:
+            asyncio.run(_read_upload(AsyncUpload("collection.json", b"12345")))
+        self.assertEqual(raised.exception.status_code, 413)
+
+    def test_limits_expanded_spreadsheet_rows(self):
+        import asyncio
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        for value in ("ID", "CP-01", "CP-02"):
+            workbook.active.append([value])
+        buffer = BytesIO()
+        workbook.save(buffer)
+        with patch("services.postman_generator.MAX_SPREADSHEET_ROWS", 2), self.assertRaises(HTTPException) as raised:
+            asyncio.run(_read_upload(AsyncUpload("casos.xlsx", buffer.getvalue())))
+        self.assertEqual(raised.exception.status_code, 413)
+
     def test_openapi_users_domain_generates_collection(self):
         openapi = """
 openapi: 3.0.0
@@ -87,6 +109,7 @@ Resultado esperado: Rechazo controlado.
         sheet.title = "Casos"
         sheet.append(["ID", "Nombre", "Resultado esperado"])
         sheet.append(["CP-01", "Crear siniestro", "HTTP 201"])
+        sheet.append(["CP-02", "Validar cero", 0])
         buffer = BytesIO()
         workbook.save(buffer)
         upload = AsyncUpload("casos.xlsx", buffer.getvalue())
@@ -96,6 +119,7 @@ Resultado esperado: Rechazo controlado.
         source = asyncio.run(_read_upload(upload))
         self.assertEqual(source["extension"], ".xlsx")
         self.assertIn("Crear siniestro", source["text"])
+        self.assertIn("Resultado esperado: 0", source["text"])
 
     def test_cases_spreadsheet_exports_only_its_named_cases(self):
         from openpyxl import Workbook

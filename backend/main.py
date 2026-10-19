@@ -8,6 +8,7 @@ import time
 import traceback
 from pathlib import Path
 from typing import List, Dict, Optional
+from urllib.parse import quote
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse, JSONResponse, FileResponse, RedirectResponse
@@ -23,12 +24,11 @@ from schemas import FeedbackOut, GenerateFunctionalIn
 
 # Servicios
 from services.parsing import docx_to_text
-from services.testcases import generate_testcases_markdown
+from services.testcases import case_rows_from_markdown, generate_testcases_markdown
 from services.ai import AIResponseError, MAX_FEEDBACK_SNIPPETS, build_messages, complete
 from services.generator import generate_functional_json, functional_json_to_docx
 from services.project_chat import chat_proyectos
 from services.files import safe_filename, safe_stem, save_upload
-from services.markdown_table import first_table
 from services.auth import require_roles
 from services.activity import record_activity
 from services.quality_records import router as quality_records_router
@@ -177,12 +177,14 @@ async def explain(
     db: Session = Depends(get_db),
     user=Depends(require_roles("qa", "lider")),
 ):
-    if not file.filename.lower().endswith(".docx"):
+    if not (file.filename or "").lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Subí un .docx")
     filename = safe_filename(file.filename)
     tmp_path = await save_upload(file, DATA_DIR / filename)
-
-    text = docx_to_text(str(tmp_path))
+    try:
+        text = await run_in_threadpool(docx_to_text, str(tmp_path))
+    finally:
+        tmp_path.unlink(missing_ok=True)
     msgs = build_messages(EXPLAIN_PROMPT_STORY, text, get_recent_feedback_snippets(db))
     explanation = await run_in_threadpool(complete, msgs)
 
@@ -192,7 +194,7 @@ async def explain(
     explanation = explanation.replace("  ", " ")          # espacios dobles
     explanation = explanation.strip()
 
-    out_path = DATA_DIR / "outputs" / f"explicacion_{safe_stem(filename)}.txt"
+    out_path = DATA_DIR / "outputs" / f"explicacion_{safe_stem(filename)}_{secrets.token_hex(4)}.txt"
     out_path.write_text(explanation, encoding="utf-8")
     await record_activity(
         user,
@@ -217,18 +219,18 @@ async def quality(
     db: Session = Depends(get_db),
     user=Depends(require_roles("funcional", "lider")),
 ):
-    if not file.filename.lower().endswith(".docx"):
+    if not (file.filename or "").lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Subí un .docx")
 
     filename = safe_filename(file.filename)
     tmp_path = await save_upload(file, DATA_DIR / filename)
 
     try:
-        qr = evaluate_docx_against_template(str(tmp_path))
+        qr = await run_in_threadpool(evaluate_docx_against_template, str(tmp_path))
         score = qr.total_score
         report_md = build_markdown_report(qr)
 
-        out_path = DATA_DIR / "outputs" / f"calidad_{safe_stem(filename)}.txt"
+        out_path = DATA_DIR / "outputs" / f"calidad_{safe_stem(filename)}_{secrets.token_hex(4)}.txt"
         out_path.write_text(report_md, encoding="utf-8")
         await record_activity(
             user,
@@ -314,22 +316,26 @@ async def testcases(
     db: Session = Depends(get_db),
     user=Depends(require_roles("qa")),
 ):
-    if not file.filename.lower().endswith(".docx"):
+    if not (file.filename or "").lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Subí un .docx")
     request_id = secrets.token_hex(4)
     original_name = safe_filename(file.filename)
     logger.info("testcase_request_received request_id=%s filename=%s", request_id, original_name)
     try:
         tmp_path = await save_upload(file, DATA_DIR / original_name)
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("No se pudo guardar archivo para casos de prueba")
         raise HTTPException(status_code=500, detail="No se pudo guardar el archivo subido.")
 
     try:
-        text = docx_to_text(str(tmp_path))
+        text = await run_in_threadpool(docx_to_text, str(tmp_path))
     except Exception:
         logger.exception("No se pudo leer DOCX para casos de prueba")
         raise HTTPException(status_code=400, detail="No se pudo leer el DOCX. Verificá que el archivo no esté dañado.")
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
     if not text or len(text.strip()) < 40:
         raise HTTPException(status_code=400, detail="No se pudo extraer texto suficiente del DOCX.")
@@ -371,39 +377,14 @@ async def testcases(
         )
 
     try:
-        rows: List[Dict[str, str]] = []
-        for row_map in first_table(table_md).rows:
-            numero = row_map.get("número", row_map.get("numero", ""))
-            rows.append({
-                "Caso de Prueba": numero or "1",
-                "Objetivo": row_map.get("objetivo de la prueba", ""),
-                "Paso a Paso": "",
-                "Resultado Esperado": row_map.get("resultado esperado", ""),
-                "Precondiciones": "",
-                "Prioridad": "",
-                "Datos de Prueba": "",
-                "Funcionalidad": row_map.get("funcionalidad", ""),
-                "Observaciones": row_map.get("observaciones", ""),
-            })
-
-        if not rows:
-            rows = [{
-                "Caso de Prueba": "1",
-                "Objetivo": "Validar funcionalidad principal del DF",
-                "Paso a Paso": "",
-                "Resultado Esperado": "Resultados según reglas del DF",
-                "Precondiciones": "",
-                "Prioridad": "",
-                "Datos de Prueba": "",
-                "Funcionalidad": "—",
-                "Observaciones": "La IA no devolvió una tabla parseable; revisar el documento y regenerar.",
-            }]
-
-        excel_bytes = to_excel_bytes(rows)
-        output_name = f"casos_{safe_stem(original_name)}.xlsx"
+        rows = case_rows_from_markdown(table_md)
+        excel_bytes = await run_in_threadpool(to_excel_bytes, rows)
+        output_name = f"casos_{safe_stem(original_name)}_{request_id}.xlsx"
         out_path = DATA_DIR / "outputs" / output_name
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(excel_bytes)
+    except AIResponseError:
+        raise
     except Exception:
         logger.exception("No se pudo armar Excel de casos")
         raise HTTPException(status_code=500, detail="Se generaron los casos, pero falló la creación del Excel.")
@@ -420,10 +401,11 @@ async def testcases(
             "cantidad_casos": len(rows),
         },
     )
+    download_name = f"casos_{safe_stem(original_name)}.xlsx"
     return StreamingResponse(
         iter([excel_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={output_name}"}
+        headers={"Content-Disposition": f"attachment; filename=casos.xlsx; filename*=UTF-8''{quote(download_name)}"}
     )
 
 # === 4) FEEDBACK ===
@@ -434,7 +416,7 @@ async def upload_feedback(
     notes: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    if not file.filename.lower().endswith(".xlsx"):
+    if not (file.filename or "").lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="Subí un .xlsx con los casos ajustados")
 
     filename = safe_filename(file.filename)

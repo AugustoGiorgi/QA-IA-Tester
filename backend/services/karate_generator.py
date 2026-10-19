@@ -16,7 +16,7 @@ from pymongo import DESCENDING
 from services.activity import record_activity
 from services.auth import _db, current_user
 from services.files import safe_filename
-from services.postman_generator import _read_upload, build_intermediate_model
+from services.postman_generator import MAX_SOURCE_FILES, MAX_TOTAL_SOURCE_BYTES, MAX_TOTAL_SOURCE_TEXT_CHARS, _read_upload, build_intermediate_model
 
 
 router = APIRouter(prefix="/api/karate", tags=["karate-generator"])
@@ -269,9 +269,28 @@ async def generate_karate(
     user: Dict[str, Any] = Depends(current_user),
 ):
     _get_role(user)
-    sources = [await _read_upload(file) for file in (files or [])]
+    if len(manual_text) > MAX_TOTAL_SOURCE_TEXT_CHARS:
+        raise HTTPException(status_code=413, detail="El texto pegado es demasiado grande para analizarlo completo.")
+    if len(files or []) + bool(cases_file and cases_file.filename) > MAX_SOURCE_FILES:
+        raise HTTPException(status_code=413, detail=f"Cargá como máximo {MAX_SOURCE_FILES} archivos.")
+    sources = []
+    total_bytes = 0
+    total_text_chars = len(manual_text)
+    for file in files or []:
+        source = await _read_upload(file)
+        total_bytes += source["size"]
+        total_text_chars += len(source["text"])
+        if total_bytes > MAX_TOTAL_SOURCE_BYTES:
+            raise HTTPException(status_code=413, detail="El conjunto de archivos supera el límite de 40 MB.")
+        if total_text_chars > MAX_TOTAL_SOURCE_TEXT_CHARS:
+            raise HTTPException(status_code=413, detail="El conjunto de documentos contiene demasiado texto para analizarlo completo.")
+        sources.append(source)
     if cases_file and cases_file.filename:
         source = await _read_upload(cases_file)
+        if total_bytes + source["size"] > MAX_TOTAL_SOURCE_BYTES:
+            raise HTTPException(status_code=413, detail="El conjunto de archivos supera el límite de 40 MB.")
+        if total_text_chars + len(source["text"]) > MAX_TOTAL_SOURCE_TEXT_CHARS:
+            raise HTTPException(status_code=413, detail="El conjunto de documentos contiene demasiado texto para analizarlo completo.")
         source["is_cases_file"] = True
         sources.append(source)
     if not sources and not manual_text.strip():

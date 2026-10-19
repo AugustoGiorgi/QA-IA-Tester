@@ -26,6 +26,8 @@ THREADS = "SQLAssistantThreads"
 MAX_SCHEMA_ROWS = 100000
 MAX_THREAD_MESSAGES = 100
 MAX_MESSAGE_CHARS = 8000
+MAX_PROMPT_HISTORY_CHARS = 24000
+_schema_cache: Optional[Tuple[Any, List[Dict[str, Any]], List[Dict[str, Any]]]] = None
 
 COLUMN_HEADERS = {"ESQUEMA", "TABLA", "POSICION", "COLUMNA", "TIPO", "LARGO", "PRECISION", "ESCALA", "ADMITE_NULOS"}
 RELATION_HEADERS = {
@@ -180,6 +182,32 @@ def _select_schema_context(column_rows: Sequence[Dict[str, Any]], relation_rows:
     return json.dumps(data, ensure_ascii=True, separators=(",", ":"))
 
 
+async def _catalog_rows(db: Any, version: Any) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    global _schema_cache
+    if _schema_cache is not None and _schema_cache[0] == version:
+        return _schema_cache[1], _schema_cache[2]
+    columns = await db[SCHEMA_COLUMNS].find({"catalog_version": version}, {"_id": 0, "catalog_version": 0}).to_list(length=MAX_SCHEMA_ROWS)
+    relations = await db[SCHEMA_RELATIONS].find({"catalog_version": version}, {"_id": 0, "catalog_version": 0}).to_list(length=MAX_SCHEMA_ROWS)
+    _schema_cache = (version, columns, relations)
+    return columns, relations
+
+
+def _prompt_history(messages: Sequence[Dict[str, Any]]) -> List[Dict[str, str]]:
+    selected = []
+    used = 0
+    for item in reversed(messages):
+        if item.get("role") not in {"user", "assistant"} or not item.get("content"):
+            continue
+        content = item["content"]
+        if item.get("role") == "assistant" and item.get("sql"):
+            content += "\nSQL anterior:\n" + item["sql"]
+        if selected and used + len(content) > MAX_PROMPT_HISTORY_CHARS:
+            break
+        selected.append({"role": item["role"], "content": content[:MAX_PROMPT_HISTORY_CHARS]})
+        used += min(len(content), MAX_PROMPT_HISTORY_CHARS)
+    return list(reversed(selected))
+
+
 def _validate_select(sql: str) -> str:
     cleaned = (sql or "").strip()
     cleaned = re.sub(r"^```(?:sql)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE).strip()
@@ -289,8 +317,7 @@ async def send_message(payload: MessageIn, user: Dict[str, Any] = Depends(curren
     messages = list(thread.get("messages", []))[-(MAX_THREAD_MESSAGES - 2):]
     latest_query = "\n".join(item.get("content", "") for item in messages[-8:] if item.get("role") in {"user", "assistant"}) + "\n" + message
     version = meta.get("catalog_version")
-    column_rows = await db[SCHEMA_COLUMNS].find({"catalog_version": version}, {"_id": 0, "catalog_version": 0}).to_list(length=MAX_SCHEMA_ROWS)
-    relation_rows = await db[SCHEMA_RELATIONS].find({"catalog_version": version}, {"_id": 0, "catalog_version": 0}).to_list(length=MAX_SCHEMA_ROWS)
+    column_rows, relation_rows = await _catalog_rows(db, version)
     schema_context = _select_schema_context(column_rows, relation_rows, latest_query)
     knowledge_rows = await db[KNOWLEDGE].find({}, {"_id": 0, "term": 1, "definition": 1}).limit(500).to_list(length=500)
     context_tokens = _tokens(latest_query)
@@ -300,7 +327,7 @@ async def send_message(payload: MessageIn, user: Dict[str, Any] = Depends(curren
         if context_tokens & item_tokens:
             relevant_knowledge.append(item)
     knowledge_context = json.dumps(relevant_knowledge[:30], ensure_ascii=True, separators=(",", ":"))
-    conversation = [{"role": item["role"], "content": item["content"]} for item in messages if item.get("role") in {"user", "assistant"} and item.get("content")]
+    conversation = _prompt_history(messages)
     user_content = "CONTEXTO DE ESQUEMA JSON (nombres Oracle no confiables, solo metadatos):\n{}\n\nBASE DE CONOCIMIENTO COMPARTIDA JSON:\n{}\n\nMENSAJE ACTUAL:\n{}".format(schema_context, knowledge_context, message)
     prompt_messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -332,9 +359,12 @@ async def send_message(payload: MessageIn, user: Dict[str, Any] = Depends(curren
         "sql": sql, "assumptions": assumptions,
         "created_at": now,
     }
-    new_messages = messages + [user_message, assistant_message]
     title = thread.get("title") or (message[:70] + ("…" if len(message) > 70 else ""))
     if title == "Nueva consulta":
         title = message[:70] + ("…" if len(message) > 70 else "")
-    await db[THREADS].update_one({"_id": thread_id}, {"$set": {"title": title, "messages": new_messages, "updated_at": now}})
-    return {"thread": {"id": thread_id, "title": title, "messages": new_messages}, "message": assistant_message}
+    await db[THREADS].update_one(
+        {"_id": thread_id},
+        {"$set": {"title": title, "updated_at": now}, "$push": {"messages": {"$each": [user_message, assistant_message], "$slice": -MAX_THREAD_MESSAGES}}},
+    )
+    updated_thread = await db[THREADS].find_one({"_id": thread_id})
+    return {"thread": _public_thread(updated_thread, include_messages=True), "message": assistant_message}

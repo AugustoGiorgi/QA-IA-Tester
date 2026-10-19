@@ -9,6 +9,7 @@ import re
 
 from services.parsing import docx_to_text
 from services.ai import AIResponseError, complete
+from services.files import MAX_UPLOAD_BYTES
 
 router = APIRouter()
 
@@ -40,22 +41,26 @@ def _append_history(session_id: str, role: str, content: str):
 
 @router.post("/api/chat/start")
 async def chat_start(file: UploadFile = File(...), explanation: str = "") -> Dict[str, Any]:
-    if not file.filename.lower().endswith(".docx"):
+    if not (file.filename or "").lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Subí un .docx")
 
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera el límite de 20 MB.")
     session_id = str(uuid4())
     d = _session_dir(session_id)
 
     # Guardar el DOCX original
     docx_path = d / "doc.docx"
-    content = await file.read()
     docx_path.write_bytes(content)
 
     # Extraer texto del DOCX
     try:
-        txt = docx_to_text(str(docx_path))
+        txt = await run_in_threadpool(docx_to_text, str(docx_path))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No pude leer el DOCX: {e}")
+    finally:
+        docx_path.unlink(missing_ok=True)
 
     (d / "doc.txt").write_text(txt, encoding="utf-8")
     (d / "explanation.txt").write_text(explanation or "", encoding="utf-8")

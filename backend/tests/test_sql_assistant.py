@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import unittest
 from pathlib import Path
@@ -13,6 +14,8 @@ from services.sql_assistant import (
     _csv_records,
     _schema_table,
     _select_schema_context,
+    _catalog_rows,
+    _prompt_history,
     _validate_select,
     router,
     MessageIn,
@@ -89,6 +92,15 @@ class SqlAssistantTests(unittest.TestCase):
         self.assertIn("/api/sql-assistant/conversation", paths)
         self.assertIn("/api/sql-assistant/conversation/messages", paths)
 
+    def test_prompt_keeps_prior_sql_with_bounded_history(self):
+        history = [
+            {"role": "user", "content": "Consultar pólizas"},
+            {"role": "assistant", "content": "Consulta lista", "sql": "SELECT p.NPOLICY FROM INSUDB.POLICY p"},
+        ]
+        prompt = _prompt_history(history)
+        self.assertIn("SQL anterior:\nSELECT", prompt[-1]["content"])
+        self.assertEqual([item["role"] for item in prompt], ["user", "assistant"])
+
 
 class AsyncCursor:
     def __init__(self, rows):
@@ -106,15 +118,24 @@ class FakeCollection:
         self.one = one
         self.rows = rows or []
         self.updates = []
+        self.find_calls = 0
 
     async def find_one(self, _query):
         return self.one
 
     def find(self, _query, _projection=None):
+        self.find_calls += 1
         return AsyncCursor(self.rows)
 
     async def update_one(self, query, update, upsert=False):
         self.updates.append((query, update, upsert))
+        if self.one is None and upsert:
+            self.one = {"_id": query["_id"], **update.get("$setOnInsert", {})}
+        if self.one is not None:
+            self.one.update(update.get("$set", {}))
+            push = update.get("$push", {}).get("messages")
+            if push:
+                self.one["messages"] = (self.one.get("messages", []) + push["$each"])[push["$slice"]:]
 
 
 class FakeDatabase:
@@ -126,6 +147,17 @@ class FakeDatabase:
 
 
 class SqlAssistantAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_catalog_rows_are_reused_until_version_changes(self):
+        columns = FakeCollection(rows=[{"column": "NPOLICY"}])
+        relations = FakeCollection(rows=[{"column": "NCLIENT"}])
+        db = FakeDatabase({SCHEMA_COLUMNS: columns, SCHEMA_RELATIONS: relations})
+        with patch("services.sql_assistant._schema_cache", None):
+            await _catalog_rows(db, "v1")
+            await _catalog_rows(db, "v1")
+            await _catalog_rows(db, "v2")
+        self.assertEqual(columns.find_calls, 2)
+        self.assertEqual(relations.find_calls, 2)
+
     async def test_normal_chat_does_not_save_definition_to_knowledge(self):
         collections = {
             THREADS: FakeCollection(one={"_id": "shared", "title": "Chat SQL del equipo", "messages": []}),
@@ -135,10 +167,33 @@ class SqlAssistantAsyncTests(unittest.IsolatedAsyncioTestCase):
             KNOWLEDGE: FakeCollection(),
         }
         response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"status":"question","reply":"¿Qué significa vigente?","sql":"","assumptions":[],"knowledge":{"term":"póliza vigente","definition":"Estado activo"}}'))])
-        with patch("services.sql_assistant._db", return_value=FakeDatabase(collections)), patch("services.sql_assistant.chat_completion_async", new=AsyncMock(return_value=response)):
+        with patch("services.sql_assistant._db", return_value=FakeDatabase(collections)), patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", new=AsyncMock(return_value=response)):
             await send_message(MessageIn(message="Vigente significa estado activo"), {"username": "shared"})
         self.assertEqual(collections[KNOWLEDGE].updates, [])
-        self.assertTrue(any("messages" in update.get("$set", {}) for _, update, _ in collections[THREADS].updates))
+        self.assertTrue(any("messages" in update.get("$push", {}) for _, update, _ in collections[THREADS].updates))
+
+    async def test_simultaneous_messages_are_both_preserved(self):
+        collections = {
+            THREADS: FakeCollection(one={"_id": "shared", "title": "Chat SQL del equipo", "messages": []}),
+            SCHEMA_META: FakeCollection(one={"_id": "current", "catalog_version": "v1"}),
+            SCHEMA_COLUMNS: FakeCollection(rows=[{"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "type": "NUMBER"}]),
+            SCHEMA_RELATIONS: FakeCollection(),
+            KNOWLEDGE: FakeCollection(),
+        }
+        response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"status":"question","reply":"¿Qué estado?","sql":"","assumptions":[]}'))])
+
+        async def complete(*_args, **_kwargs):
+            await asyncio.sleep(0)
+            return response
+
+        with patch("services.sql_assistant._db", return_value=FakeDatabase(collections)), patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", side_effect=complete):
+            await asyncio.gather(
+                send_message(MessageIn(message="Primera consulta"), {"username": "shared"}),
+                send_message(MessageIn(message="Segunda consulta"), {"username": "shared"}),
+            )
+        messages = collections[THREADS].one["messages"]
+        self.assertEqual(len(messages), 4)
+        self.assertEqual({item["content"] for item in messages if item["role"] == "user"}, {"Primera consulta", "Segunda consulta"})
 
 
 if __name__ == "__main__":

@@ -5,6 +5,9 @@ const sideNav = document.getElementById('sideNav');
 const appView = document.getElementById('appView');
 const viewTitle = document.getElementById('viewTitle');
 const viewSubtitle = document.getElementById('viewSubtitle');
+let disposeModule = () => {};
+let activeViewId = 'inicio';
+let qualityRenderId = 0;
 
 const TASK_ROLES = ['qa', 'lider'];
 
@@ -43,6 +46,9 @@ function renderSidebar(activeId = 'inicio') {
 }
 
 async function navigate(id) {
+  disposeModule();
+  disposeModule = () => {};
+  activeViewId = id;
   document.body.classList.remove('sidebar-open');
   renderSidebar(id);
   const tool = tools.find(item => item.id === id);
@@ -60,21 +66,39 @@ function renderModule(tool) {
   frame.setAttribute('scrolling', 'no');
   frame.src = tool.href;
   frame.addEventListener('load', () => {
+    if (!frame.isConnected) return;
+    disposeModule();
+    disposeModule = () => {};
     const doc = frame.contentDocument;
     if (!doc?.documentElement || !doc.body) return;
 
+    let resizeFrame = 0;
     const syncHeight = () => {
+      if (!frame.isConnected) return;
       const contentHeight = Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight);
       frame.style.height = `${Math.max(contentHeight, 560)}px`;
     };
-    const resizeObserver = window.ResizeObserver ? new ResizeObserver(syncHeight) : null;
+    const scheduleHeight = () => {
+      if (!frame.isConnected || resizeFrame) return;
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = 0;
+        syncHeight();
+      });
+    };
+    const resizeObserver = window.ResizeObserver ? new ResizeObserver(scheduleHeight) : null;
     resizeObserver?.observe(doc.documentElement);
     resizeObserver?.observe(doc.body);
-    const mutationObserver = new MutationObserver(() => requestAnimationFrame(syncHeight));
+    const mutationObserver = new MutationObserver(scheduleHeight);
     mutationObserver.observe(doc.body, { childList: true, subtree: true, attributes: true, characterData: true });
-    doc.defaultView.addEventListener('resize', syncHeight);
-    doc.fonts?.ready.then(syncHeight);
-    syncHeight();
+    doc.defaultView?.addEventListener('resize', scheduleHeight);
+    doc.fonts?.ready.then(scheduleHeight);
+    disposeModule = () => {
+      resizeObserver?.disconnect();
+      mutationObserver.disconnect();
+      doc.defaultView?.removeEventListener('resize', scheduleHeight);
+      if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    };
+    scheduleHeight();
   });
   appView.replaceChildren(frame);
 }
@@ -85,10 +109,12 @@ function renderRegistroIA() {
 }
 
 async function renderQualityRecords() {
+  const renderId = ++qualityRenderId;
   const current = getUser();
   appView.innerHTML = `<div class="panel-block">Cargando registro IA...</div>`;
   try {
     const data = await getJson('/api/quality-records');
+    if (activeViewId !== 'registro-ia' || renderId !== qualityRenderId) return;
     const records = data.records || [];
     const canCreate = current.role === 'qa';
     appView.innerHTML = `
@@ -132,6 +158,7 @@ async function renderQualityRecords() {
     document.getElementById('btnExportQuality')?.addEventListener('click', exportQualityTable);
     wireQualityRows(records);
   } catch (err) {
+    if (activeViewId !== 'registro-ia' || renderId !== qualityRenderId) return;
     appView.innerHTML = `<div class="panel-block bad">${escapeHtml(err.message)}</div>`;
   }
 }
