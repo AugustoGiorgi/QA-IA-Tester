@@ -77,6 +77,9 @@ class SqlAssistantTests(unittest.TestCase):
             "SELECT p.* FROM POLICY p",
             "UPDATE POLICY SET SSTATUS_POL = 'A'",
             "SELECT * FROM POLICY; DELETE FROM POLICY",
+            "SELECT NPOLICY INTO :result FROM POLICY",
+            "SELECT NPOLICY FROM POLICY FOR UPDATE",
+            "SELECT DBMS_LOCK.SLEEP(10) FROM dual",
             "WITH x AS (SELECT 1 FROM dual) SELECT * FROM x",
             "SELECT NPOLICY FROM POLICY /* UPDATE */ WHERE NPOLICY=1; DROP TABLE POLICY",
         ):

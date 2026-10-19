@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import csv
 import json
 import re
 import shlex
 import tempfile
+import unicodedata
 import zipfile
+from copy import deepcopy
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import parse_qsl, urlparse
+from urllib.parse import parse_qsl, quote, urlparse
 
 import yaml
 from bson import ObjectId
@@ -80,6 +83,66 @@ def _source_ref(name: str, kind: str, location: str = "") -> Dict[str, str]:
     return {"source": name, "kind": kind, "location": location}
 
 
+def _case_sheet_lines(rows: List[List[str]], seen_case_ids: set) -> List[str]:
+    rows = [row for row in rows if any(row)]
+    if not rows:
+        return []
+    known_headers = {
+        "id y escenario", "id caso", "identificador", "id", "tc", "cp", "caso", "caso de prueba",
+        "test case", "escenario", "nombre", "nombre del caso", "scenario", "test name", "titulo",
+        "título", "descripcion", "descripción", "endpoint sugerido", "endpoint", "request", "url",
+        "servicio", "resultado esperado", "expected result", "criterio final", "precondiciones",
+        "precondicion", "precondición", "pasos", "steps", "datos de prueba", "categoria", "categoría",
+    }
+    header_row_index = next((index for index, row in enumerate(rows[:5])
+                             if len({re.sub(r"\s+", " ", value.lower()) for value in row if value} & known_headers) >= 2), None)
+    if header_row_index is None:
+        return []
+    headers = [re.sub(r"\s+", " ", value.strip().lower()) for value in rows[header_row_index]]
+    columns = {header: index for index, header in enumerate(headers) if header}
+
+    def cell(values: List[str], *keys: str) -> str:
+        index = next((columns[key] for key in keys if key in columns), None)
+        return values[index] if index is not None and index < len(values) else ""
+
+    lines: List[str] = []
+    for row_index, values in enumerate(rows[header_row_index + 1:], start=1):
+        if not any(values):
+            continue
+        identifier = cell(values, "id y escenario", "id caso", "identificador", "id", "tc", "cp", "caso", "test case")
+        if not identifier:
+            identifier = next((value for value in values if re.match(r"(?i)^(?:CP|TC|CASE)[\s#:_-]*\d+", value)), "")
+        case_id_match = re.match(r"(?i)^(?:CP|TC|CASE)[\s#:_-]*\d+", identifier)
+        if case_id_match:
+            case_key = re.sub(r"[^A-Z0-9]", "", case_id_match.group(0).upper())
+            if case_key in seen_case_ids:
+                continue
+            seen_case_ids.add(case_key)
+        scenario = cell(values, "escenario", "nombre", "nombre del caso", "scenario", "test name", "titulo", "título", "descripcion", "descripción", "caso de prueba")
+        if not scenario and "id y escenario" not in columns:
+            scenario = next((value for value in values if value and value != identifier and not re.match(r"(?i)^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s", value)), "")
+        identifier = re.sub(r"(?i)^caso\s+", "", identifier).strip()
+        scenario = re.sub(rf"(?i)^\s*{re.escape(identifier)}\s*(?:[-:|]|\s)\s*", "", scenario).strip() if identifier else scenario
+        case_title = " - ".join(part for part in (identifier, scenario) if part) or f"Caso {row_index}"
+        endpoint = cell(values, "endpoint sugerido", "endpoint", "request", "url", "servicio")
+        if not endpoint:
+            endpoint = next((value for value in values if re.match(r"(?i)^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\S+", value)), "")
+        category = cell(values, "categoria", "categoría", "tipo")
+        context = cell(values, "contexto inicial", "precondiciones", "precondicion", "precondición")
+        inputs = cell(values, "valores de entrada", "datos de prueba", "datos", "entrada")
+        action = cell(values, "accion", "acción", "pasos", "steps")
+        expected = cell(values, "criterio final", "resultado esperado", "expected result", "expected")
+        used_values = {identifier, scenario, endpoint, category, context, inputs, action, expected}
+        extra = [f"{headers[index]}: {value}" for index, value in enumerate(values)
+                 if value and index < len(headers) and value not in used_values]
+        lines.extend([
+            f"CASO {case_title}", f"Endpoint: {endpoint}", f"Categoria: {category}",
+            f"Precondiciones: {context}", f"Datos de prueba: {inputs}", f"Pasos: {action}",
+            f"Resultado esperado: {expected}", *extra, "",
+        ])
+    return lines
+
+
 async def _read_upload(file: UploadFile) -> Dict[str, Any]:
     filename = safe_filename(file.filename or "fuente.txt")
     raw = await file.read(MAX_SOURCE_BYTES + 1)
@@ -121,70 +184,7 @@ def _decode_upload(filename: str, raw: bytes) -> Dict[str, Any]:
                         values = [str(value).strip() if value is not None else "" for value in row]
                         if any(values):
                             rows.append(values)
-                    if not rows:
-                        continue
-                    known_headers = {
-                        "id y escenario", "id caso", "identificador", "id", "tc", "cp", "caso", "caso de prueba", "test case",
-                        "escenario", "nombre", "nombre del caso", "scenario", "test name", "titulo", "título", "descripcion", "descripción",
-                        "endpoint sugerido", "endpoint", "request", "url", "servicio", "resultado esperado", "expected result",
-                        "criterio final", "precondiciones", "precondicion", "precondición", "pasos", "steps", "datos de prueba",
-                    }
-                    header_row_index = 0
-                    for candidate_index, candidate in enumerate(rows[:5]):
-                        candidate_headers = {re.sub(r"\s+", " ", value.lower()) for value in candidate if value}
-                        if len(candidate_headers & known_headers) >= 2:
-                            header_row_index = candidate_index
-                            break
-                    headers = [re.sub(r"\s+", " ", str(value or "").strip().lower()) for value in rows[header_row_index]]
-                    columns = {header: index for index, header in enumerate(headers) if header}
-                    def cell(values: List[str], *keys: str) -> str:
-                        index = next((columns[key] for key in keys if key in columns), None)
-                        return values[index] if index is not None and index < len(values) else ""
-                    for row_index, row in enumerate(rows[header_row_index + 1:], start=1):
-                        values = [str(value or "").strip() for value in row]
-                        if not any(values) or re.match(r"(?i)^\s*(?:id|caso|test case|escenario)\s*$", " ".join(values)):
-                            continue
-                        identifier = cell(values, "id y escenario", "id caso", "identificador", "id", "tc", "cp")
-                        scenario = cell(values, "escenario", "nombre", "nombre del caso", "scenario", "test name", "titulo", "título", "descripcion", "descripción", "caso de prueba")
-                        if not identifier:
-                            identifier = cell(values, "caso", "test case")
-                        if not identifier:
-                            identifier = next((value for value in values if re.match(r"(?i)^(?:CP|TC|CASE)[\s#:_-]*\d+", value)), "")
-                        case_id_match = re.match(r"(?i)^(?:CP|TC|CASE)[\s#:_-]*\d+", identifier)
-                        if case_id_match:
-                            case_key = re.sub(r"[^A-Z0-9]", "", case_id_match.group(0).upper())
-                            if case_key in seen_case_ids:
-                                continue
-                            seen_case_ids.add(case_key)
-                        if not scenario and "id y escenario" not in columns:
-                            scenario = next((value for value in values if value and value != identifier and not re.match(r"(?i)^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s", value)), "")
-                        identifier = re.sub(r"(?i)^caso\s+", "", identifier).strip()
-                        scenario_source = scenario
-                        scenario = re.sub(rf"(?i)^\s*{re.escape(identifier)}\s*(?:[-:|]|\s)\s*", "", scenario).strip() if identifier else scenario
-                        case_title = " - ".join(part for part in (identifier, scenario) if part)
-                        if not case_title:
-                            case_title = f"Caso {row_index}"
-                        endpoint = cell(values, "endpoint sugerido", "endpoint", "request", "url", "servicio")
-                        if not endpoint:
-                            endpoint = next((value for value in values if re.match(r"(?i)^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\S+", value)), "")
-                        category = cell(values, "categoria", "categoría", "tipo")
-                        context = cell(values, "contexto inicial", "precondiciones", "precondicion", "precondición")
-                        inputs = cell(values, "valores de entrada", "datos de prueba", "datos", "entrada")
-                        action = cell(values, "accion", "acción", "pasos", "steps")
-                        expected = cell(values, "criterio final", "resultado esperado", "expected result", "expected")
-                        used_values = {identifier, scenario, scenario_source, endpoint, category, context, inputs, action, expected}
-                        extra = [f"{headers[i]}: {value}" for i, value in enumerate(values) if value and i < len(headers) and value not in used_values]
-                        lines.extend([
-                            f"CASO {case_title}",
-                            f"Endpoint: {endpoint}",
-                            f"Categoria: {category}",
-                            f"Precondiciones: {context}",
-                            f"Datos de prueba: {inputs}",
-                            f"Pasos: {action}",
-                            f"Resultado esperado: {expected}",
-                            *extra,
-                            "",
-                        ])
+                    lines.extend(_case_sheet_lines(rows, seen_case_ids))
                 text = "\n".join(lines)
             except HTTPException:
                 raise
@@ -193,6 +193,28 @@ def _decode_upload(filename: str, raw: bytes) -> Dict[str, Any]:
             finally:
                 if workbook is not None:
                     workbook.close()
+        elif suffix == ".csv":
+            try:
+                try:
+                    decoded = raw.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    decoded = raw.decode("cp1252")
+                sample = decoded[:4096]
+                try:
+                    dialect = csv.Sniffer().sniff(sample, delimiters=",;\t") if sample else csv.excel
+                except csv.Error:
+                    dialect = csv.excel
+                reader = csv.reader(decoded.splitlines(), dialect)
+                rows = []
+                for row in reader:
+                    if len(rows) >= MAX_SPREADSHEET_ROWS:
+                        raise HTTPException(status_code=413, detail=f"El CSV {filename} supera las {MAX_SPREADSHEET_ROWS} filas.")
+                    rows.append([value.strip() for value in row])
+                text = "\n".join(_case_sheet_lines(rows, set())) or decoded
+            except HTTPException:
+                raise
+            except Exception:
+                parse_warning = "No se pudo leer el CSV de casos. Verificá el formato y la codificación."
         elif suffix == ".pdf":
             try:
                 from pypdf import PdfReader
@@ -202,7 +224,7 @@ def _decode_upload(filename: str, raw: bytes) -> Dict[str, Any]:
             except Exception:
                 parse_warning = "No se pudo extraer texto del PDF. Si es escaneado, converti a texto o DOCX."
         elif suffix in TEXT_EXTENSIONS or not suffix:
-            text = raw.decode("utf-8", errors="replace")
+            text = raw.decode("utf-8-sig", errors="replace")
         else:
             parse_warning = f"Formato {suffix} recibido; se conservara como fuente pero no se pudo leer como texto."
     except HTTPException:
@@ -222,7 +244,7 @@ def _decode_upload(filename: str, raw: bytes) -> Dict[str, Any]:
 
 def _try_load_structured(text: str) -> Optional[Any]:
     clean = (text or "").strip()
-    if not clean:
+    if not clean or not re.match(r"(?i)^(?:\{|\[|---|openapi\s*:|swagger\s*:|paths\s*:|info\s*:)", clean):
         return None
     for loader in (json.loads, yaml.safe_load):
         try:
@@ -234,6 +256,14 @@ def _try_load_structured(text: str) -> Optional[Any]:
     return None
 
 
+def _is_postman_collection(data: Any) -> bool:
+    if not isinstance(data, dict) or not isinstance(data.get("item"), list):
+        return False
+    info = data.get("info") or {}
+    schema = str(info.get("schema") or "") if isinstance(info, dict) else ""
+    return "collection/" in schema or bool(info)
+
+
 def _classify_source(source: Dict[str, Any]) -> List[str]:
     text = source.get("text", "")
     normalized = text.lower()
@@ -241,8 +271,10 @@ def _classify_source(source: Dict[str, Any]) -> List[str]:
     kinds: List[str] = []
     if isinstance(data, dict) and ("openapi" in data or "swagger" in data or "paths" in data):
         kinds.append("api_definition")
-    if isinstance(data, dict) and data.get("info", {}).get("schema", "").endswith("collection/v2.1.0/collection.json"):
+    if _is_postman_collection(data):
         kinds.append("postman_collection")
+    if isinstance(data, dict) and (isinstance(data.get("request"), dict) or (data.get("method") and data.get("url"))):
+        kinds.append("postman_request")
     if "curl " in normalized:
         kinds.append("curl")
     if re.search(r"\b(get|post|put|patch|delete|head|options)\s+https?://", normalized):
@@ -275,25 +307,28 @@ def _endpoint_id(method: str, path: str, index: int) -> str:
     return f"req_{method.lower()}_{_safe_key(path, 'path')}_{index}"
 
 
-def _normalized_endpoint_key(endpoint: Dict[str, Any]) -> Tuple[str, str]:
+def _normalized_endpoint_key(endpoint: Dict[str, Any]) -> Tuple[str, str, str]:
     method = str(endpoint.get("method") or "GET").upper()
+    base = str(endpoint.get("base_url") or "").lower().rstrip("/")
     path = str(endpoint.get("path") or endpoint.get("name") or "").split("?")[0].strip()
     path = re.sub(r"https?://[^/]+", "", path)
     path = re.sub(r"\{\{[^}]+\}\}", "{var}", path)
     path = re.sub(r":([A-Za-z0-9_]+)", "{var}", path)
     path = re.sub(r"\{[^}]+\}", "{var}", path)
     path = re.sub(r"/+", "/", path).rstrip("/") or "/"
-    return method, path.lower()
+    return method, base, path.lower()
 
 
 def _dedupe_endpoints(endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    unique: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    unique: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
     for endpoint in endpoints:
         key = _normalized_endpoint_key(endpoint)
         existing = unique.get(key)
         if not existing:
             unique[key] = endpoint
             continue
+        if any(existing.get(field) != endpoint.get(field) for field in ("body", "headers", "query_params", "auth")):
+            existing.setdefault("variants", []).append(endpoint)
         existing_refs = existing.setdefault("source_refs", [])
         seen_refs = {(ref.get("source"), ref.get("kind"), ref.get("location")) for ref in existing_refs}
         for ref in endpoint.get("source_refs", []):
@@ -397,11 +432,17 @@ def _openapi_endpoints(data: Dict[str, Any], source: Dict[str, Any]) -> List[Dic
     return endpoints
 
 
-def _postman_items(items: List[Dict[str, Any]], source: Dict[str, Any], folder: str = "") -> List[Dict[str, Any]]:
+def _postman_items(
+    items: List[Dict[str, Any]], source: Dict[str, Any], folder: str = "",
+    inherited_auth: Optional[Dict[str, Any]] = None, inherited_events: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
     endpoints: List[Dict[str, Any]] = []
     for item in items or []:
+        if not isinstance(item, dict):
+            continue
         if "item" in item:
-            endpoints.extend(_postman_items(item.get("item") or [], source, item.get("name") or folder))
+            events = (inherited_events or []) + [event for event in item.get("event") or [] if isinstance(event, dict) and event.get("listen") == "prerequest"]
+            endpoints.extend(_postman_items(item.get("item") or [], source, item.get("name") or folder, item.get("auth") or inherited_auth, events))
             continue
         request = item.get("request") or {}
         if isinstance(request, str):
@@ -450,6 +491,9 @@ def _postman_items(items: List[Dict[str, Any]], source: Dict[str, Any], folder: 
             body.update({"raw": body_data.get("raw") or "", "content_type": _infer_content_type(headers, body_data.get("raw"))})
         elif body["mode"] in {"urlencoded", "formdata"}:
             body.update({"items": body_data.get(body["mode"]) or []})
+        request_auth = request.get("auth") or {}
+        if not request_auth or request_auth.get("type") == "inherit":
+            request_auth = inherited_auth or {"type": "inherit"}
         endpoint = {
             "id": _endpoint_id(request.get("method", "GET").upper(), path or raw_url, len(endpoints) + 1),
             "name": item.get("name") or raw_url,
@@ -462,7 +506,7 @@ def _postman_items(items: List[Dict[str, Any]], source: Dict[str, Any], folder: 
             "query_params": query,
             "headers": headers,
             "cookies": [],
-            "auth": request.get("auth") or {"type": "inherit"},
+            "auth": request_auth,
             "body": body,
             "content_type": body.get("content_type") or _infer_content_type(headers, body.get("raw")),
             "responses": [],
@@ -470,6 +514,7 @@ def _postman_items(items: List[Dict[str, Any]], source: Dict[str, Any], folder: 
             "dependencies": [],
             "status": "active",
             "folder": folder,
+            "events": deepcopy(inherited_events or []) + deepcopy(item.get("event") or []),
             "source_refs": [_source_ref(source["name"], "postman_collection", item.get("name", ""))],
         }
         endpoints.append(endpoint)
@@ -602,20 +647,28 @@ def _extract_test_cases(text: str, source: Dict[str, Any]) -> List[Dict[str, Any
         expected_match = re.search(r"(?is)(resultado esperado|expected result|expected)\s*[:\-]\s*(.+?)(?:\n\s*\n|$)", clean)
         if expected_match:
             expected = expected_match.group(2).strip()[:1000]
+        def field(label: str) -> str:
+            boundary = r"(?:Endpoint|Request|Servicio|Categor[ií]a|Tipo|Precondiciones|Contexto inicial|Datos de prueba|Valores de entrada|Input data|Pasos|Steps|Resultado esperado|Criterio final|Expected result)"
+            match = re.search(rf"(?ims)^[ \t]*{label}[ \t]*:[ \t]*(.*?)(?=^[ \t]*{boundary}[ \t]*:|\Z)", clean)
+            return match.group(1).strip() if match else ""
+        input_data = field(r"(?:Datos de prueba|Valores de entrada|Input data)")
+        expected = field(r"(?:Resultado esperado|Criterio final|Expected result)") or expected
+        status_match = re.search(r"(?i)\b(?:HTTP|status|c[oó]digo)\s*[:=]?\s*([1-5][0-9]{2})\b", expected)
         cases.append({
             "id": f"case_{len(cases) + 1}",
             "case_id": case_id,
             "name": re.sub(r"(?i)^(?:caso|test case)\s+", "", first_line.strip("# :-")) or f"Caso {len(cases) + 1}",
-            "endpoint_hint": (re.search(r"(?im)^\s*endpoint\s*:\s*((?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\S+)", clean) or [None, ""])[1],
+            "endpoint_hint": field(r"(?:Endpoint|Request|Servicio)"),
             "objective": "",
             "description": clean[:2500],
-            "preconditions": [],
-            "input_data": {},
+            "preconditions": [field(r"(?:Precondiciones|Contexto inicial)")] if field(r"(?:Precondiciones|Contexto inicial)") else [],
+            "input_data": input_data,
             "steps": [line.strip(" -\t") for line in clean.splitlines()[1:] if line.strip()][:40],
             "expected_result": expected,
+            "expected_status": status_match.group(1) if status_match else "",
             "postconditions": [],
             "priority": "",
-            "test_type": _infer_case_type(clean),
+            "test_type": _infer_case_type(field(r"(?:Categor[ií]a|Tipo)") + " " + clean),
             "dependencies": [],
             "created_or_modified_data": [],
             "related_request_ids": [],
@@ -635,6 +688,7 @@ def _infer_case_type(text: str) -> str:
 def _extract_variables(sources: List[Dict[str, Any]], endpoints: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     variables: Dict[str, Dict[str, Any]] = {}
     warnings: List[Dict[str, Any]] = []
+    base_urls: Dict[str, str] = {}
 
     def add_var(key: str, scope: str, source: str, value: str = "", sensitive: bool = False, reason: str = "") -> None:
         safe = _safe_key(key, "variable")
@@ -652,8 +706,11 @@ def _extract_variables(sources: List[Dict[str, Any]], endpoints: List[Dict[str, 
     for endpoint in endpoints:
         if endpoint.get("base_url"):
             if not re.search(r"\{\{[A-Za-z0-9_.-]+\}\}", endpoint["base_url"]):
-                add_var("baseUrl", "environment", endpoint["source_refs"][0]["source"], endpoint["base_url"], False, "Base URL detectada")
-                endpoint["base_url"] = "{{baseUrl}}"
+                url = endpoint["base_url"]
+                endpoint["original_base_url"] = url
+                key = base_urls.setdefault(url, "baseUrl" if not base_urls else f"baseUrl{len(base_urls) + 1}")
+                add_var(key, "environment", endpoint["source_refs"][0]["source"], url, False, "Base URL detectada")
+                endpoint["base_url"] = "{{" + key + "}}"
         for header in endpoint.get("headers", []):
             if re.search(r"(?i)(authorization|token|api[-_]?key|secret|cookie)", header.get("key", "")):
                 add_var(header.get("key", "secret"), "environment", endpoint["source_refs"][0]["source"], "", True, "Header sensible")
@@ -661,7 +718,9 @@ def _extract_variables(sources: List[Dict[str, Any]], endpoints: List[Dict[str, 
         for parameter in endpoint.get("path_params", []) + endpoint.get("query_params", []):
             key = str(parameter.get("key") or "").strip()
             if key:
-                add_var(key, "environment", endpoint["source_refs"][0]["source"], str(parameter.get("value") or ""), False, "Parametro de request")
+                value = str(parameter.get("value") or "")
+                placeholder = re.fullmatch(r"\{\{([A-Za-z0-9_.-]+)\}\}", value)
+                add_var(placeholder.group(1) if placeholder else key, "environment", endpoint["source_refs"][0]["source"], "" if placeholder else value, False, "Parametro de request")
 
     for source in sources:
         text = source.get("text", "")
@@ -689,25 +748,79 @@ def _extract_variables(sources: List[Dict[str, Any]], endpoints: List[Dict[str, 
 
 
 def _associate(cases: List[Dict[str, Any]], endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def path_score(hint_path: str, endpoint_path: str) -> int:
+        hint_segments = [segment for segment in hint_path.rstrip("/").lower().split("/") if segment]
+        path_segments = [segment for segment in endpoint_path.rstrip("/").lower().split("/") if segment]
+        if not hint_segments or len(path_segments) < len(hint_segments):
+            return 0
+        score = 0
+        for hint, actual in zip(hint_segments, path_segments[-len(hint_segments):]):
+            if hint == actual:
+                score += 2
+            elif re.fullmatch(r"(?::[a-z0-9_.-]+|\{\{?[a-z0-9_.-]+\}\}?)", actual):
+                score += 1
+            else:
+                return 0
+        return score
+
     associations: List[Dict[str, Any]] = []
+    endpoint_by_id = {endpoint["id"]: endpoint for endpoint in endpoints}
     for case in cases:
+        related = next((endpoint_by_id[request_id] for request_id in case.get("related_request_ids", []) if request_id in endpoint_by_id), None)
+        if related:
+            associations.append({"case_id": case["id"], "endpoint_id": related["id"], "confidence": "Alta", "score": 100,
+                                 "evidence": ["Caso generado para este request"], "explanation": "Asociación directa.",
+                                 "source": case["source_refs"][0]["source"], "confirmed": True})
+            continue
         case_blob = " ".join([case.get("name", ""), case.get("description", ""), case.get("expected_result", "")]).lower()
         endpoint_hint = str(case.get("endpoint_hint") or "").strip()
+        if not endpoint_hint and len(endpoints) == 1:
+            associations.append({"case_id": case["id"], "endpoint_id": endpoints[0]["id"], "confidence": "Alta", "score": 90,
+                                 "evidence": ["Único endpoint de la fuente"], "explanation": "Asociación por endpoint único.",
+                                 "source": case["source_refs"][0]["source"], "confirmed": True})
+            continue
         hint_match = re.match(r"(?i)^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)", endpoint_hint)
+        if endpoint_hint and not hint_match:
+            parsed_hint = urlparse(re.sub(r"^\{\{[^}]+\}\}", "", endpoint_hint))
+            hint_path = parsed_hint.path.rstrip("/").lower()
+            scored_paths = [(path_score(hint_path, str(endpoint.get("path") or "")), endpoint) for endpoint in endpoints
+                            if hint_path and (not parsed_hint.netloc or parsed_hint.netloc.lower() in str(endpoint.get("original_base_url") or endpoint.get("base_url") or "").lower())]
+            best_path_score = max((score for score, _ in scored_paths), default=0)
+            path_matches = [endpoint for score, endpoint in scored_paths if score == best_path_score and score > 0]
+            if len(path_matches) == 1:
+                associations.append({
+                    "case_id": case["id"], "endpoint_id": path_matches[0]["id"], "confidence": "Alta", "score": 90,
+                    "evidence": ["Ruta única indicada en la planilla"], "explanation": "Asociación por la ruta del endpoint.",
+                    "source": case["source_refs"][0]["source"], "confirmed": True,
+                })
+                continue
         if hint_match:
-            hint_method, hint_path = hint_match.group(1).upper(), hint_match.group(2).rstrip("/").lower()
-            hint_segments = [segment for segment in hint_path.split("/") if segment]
+            parsed_hint = urlparse(re.sub(r"^\{\{[^}]+\}\}", "", hint_match.group(2)))
+            hint_method, hint_path = hint_match.group(1).upper(), parsed_hint.path.rstrip("/").lower()
             exact_matches = []
             for endpoint in endpoints:
                 path = str(endpoint.get("path", "")).rstrip("/").lower()
                 path_segments = [segment for segment in path.split("/") if segment]
-                if endpoint.get("method") != hint_method or len(path_segments) < len(hint_segments):
+                if endpoint.get("method") != hint_method:
                     continue
-                suffix = path_segments[-len(hint_segments):]
-                if all(expected == actual or (expected.startswith("{") and (actual.isdigit() or actual.startswith("{{"))) for expected, actual in zip(hint_segments, suffix)):
-                    exact_matches.append((len(path_segments), endpoint))
+                if parsed_hint.netloc and parsed_hint.netloc.lower() not in str(endpoint.get("original_base_url") or endpoint.get("base_url") or "").lower():
+                    continue
+                score = path_score(hint_path, path)
+                if score:
+                    exact_matches.append((len(path_segments), score, endpoint))
             if exact_matches:
-                endpoint = min(exact_matches, key=lambda match: match[0])[1]
+                shortest = min(length for length, _, _ in exact_matches)
+                best_score = max(score for length, score, _ in exact_matches if length == shortest)
+                candidates = [endpoint for length, score, endpoint in exact_matches if length == shortest and score == best_score]
+                if len(candidates) != 1:
+                    associations.append({
+                        "case_id": case["id"], "endpoint_id": "", "confidence": "Sin coincidencia", "score": 0,
+                        "evidence": ["La ruta coincide con más de una API."],
+                        "explanation": "Indicá una URL completa o el host para desambiguar el endpoint.",
+                        "source": case["source_refs"][0]["source"], "confirmed": False,
+                    })
+                    continue
+                endpoint = candidates[0]
                 associations.append({
                     "case_id": case["id"],
                     "endpoint_id": endpoint["id"],
@@ -750,7 +863,7 @@ def _associate(cases: List[Dict[str, Any]], endpoints: List[Dict[str, Any]]) -> 
                     evidence.append(f"Status {status} mencionado")
             if not best or score > best[0]:
                 best = (score, endpoint, evidence)
-        if not best or best[0] < 15:
+        if not best or best[0] < 40:
             associations.append({
                 "case_id": case["id"],
                 "endpoint_id": "",
@@ -928,35 +1041,76 @@ def _detect_conflicts(endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "") -> Dict[str, Any]:
+    sources = list(sources)
     if manual_text.strip():
         sources.append({"name": "texto_pegado", "extension": ".txt", "text": manual_text, "size": len(manual_text), "warning": ""})
     endpoints: List[Dict[str, Any]] = []
     test_cases: List[Dict[str, Any]] = []
     warnings: List[Dict[str, Any]] = []
+    has_cases_file = any(source.get("is_cases_file") or source.get("extension", "").lower() in {".xlsx", ".csv"} for source in sources)
+    has_api_source = any(source.get("extension", "").lower() in {".json", ".yaml", ".yml", ".curl", ".http"}
+                         and not source.get("is_cases_file") for source in sources)
     for source in sources:
         source["kinds"] = _classify_source(source)
         if source.get("warning"):
             warnings.append({"severity": "medium", "type": "source_read", "message": source["warning"], "source": source["name"]})
         data = _try_load_structured(source.get("text", ""))
-        is_postman_collection = isinstance(data, dict) and data.get("info", {}).get("schema", "").endswith("collection/v2.1.0/collection.json")
-        if isinstance(data, dict) and ("openapi" in data or "swagger" in data or "paths" in data):
-            endpoints.extend(_openapi_endpoints(data, source))
-        if is_postman_collection:
-            endpoints.extend(_postman_items(data.get("item") or [], source))
-        elif source.get("is_cases_file") or source.get("extension", "").lower() in {".xlsx", ".csv"}:
+        if source.get("is_cases_file") or source.get("extension", "").lower() in {".xlsx", ".csv"}:
             source["is_cases_file"] = True
             test_cases.extend(_extract_test_cases(source.get("text", ""), source))
+            continue
+        if isinstance(data, dict) and ("openapi" in data or "swagger" in data or "paths" in data):
+            endpoints.extend(_openapi_endpoints(data, source))
+        elif _is_postman_collection(data):
+            events = [event for event in data.get("event") or [] if isinstance(event, dict) and event.get("listen") == "prerequest"]
+            items = _postman_items(data.get("item") or [], source, inherited_auth=data.get("auth"), inherited_events=events)
+            source_variables = {str(variable.get("key")): str(variable.get("value") or "")
+                                for variable in data.get("variable") or [] if isinstance(variable, dict) and variable.get("key")}
+            for endpoint in items:
+                base_match = re.fullmatch(r"\{\{([A-Za-z0-9_.-]+)\}\}", str(endpoint.get("base_url") or ""))
+                resolved_base = source_variables.get(base_match.group(1), "") if base_match else ""
+                if re.match(r"(?i)^https?://\S+$", resolved_base):
+                    endpoint["base_url"] = resolved_base.rstrip("/")
+            endpoints.extend(items)
+        elif isinstance(data, dict) and isinstance(data.get("request"), dict):
+            endpoints.extend(_postman_items([data], source))
+        elif isinstance(data, dict) and data.get("method") and data.get("url"):
+            endpoints.extend(_postman_items([{"name": data.get("name") or source["name"], "request": data}], source))
+        elif isinstance(data, list) and all(isinstance(item, dict) for item in data):
+            items = [item if "request" in item or "item" in item else {"name": item.get("name") or source["name"], "request": item} for item in data]
+            endpoints.extend(_postman_items(items, source))
         else:
             endpoints.extend(_curl_endpoints(source.get("text", ""), source))
-            endpoints.extend(_text_endpoints(source.get("text", ""), source))
-            if not (isinstance(data, dict) and ("openapi" in data or "swagger" in data or "paths" in data)):
+            if not has_api_source or source.get("extension", "").lower() not in {".docx", ".pdf", ".txt", ".md"}:
+                endpoints.extend(_text_endpoints(source.get("text", ""), source))
+            if not has_cases_file:
                 test_cases.extend(_extract_test_cases(source.get("text", ""), source))
     endpoints = _dedupe_endpoints(endpoints)
+    functional_texts = [(source.get("text", "").lower(), source.get("text", "").splitlines()) for source in sources
+                        if not source.get("is_cases_file") and source.get("extension", "").lower() in {".docx", ".pdf", ".txt", ".md"}]
+    for index, endpoint in enumerate(endpoints, start=1):
+        endpoint["id"] = _endpoint_id(endpoint.get("method", "GET"), endpoint.get("path", "request"), index)
+        path = str(endpoint.get("path") or "").lower().split("?")[0]
+        if not path or path == "/":
+            continue
+        notes = []
+        for lowered, lines in functional_texts:
+            if path not in lowered:
+                continue
+            for line in lines:
+                if path in line.lower() and len(line) <= 300 and not SECRET_RE.search(line):
+                    notes.append(line.strip())
+                    if len(notes) >= 4:
+                        break
+            if len(notes) >= 4:
+                break
+        if notes:
+            endpoint["description"] = "\n".join(filter(None, [str(endpoint.get("description") or ""), "Reglas del funcional:", *notes]))
     variables, secret_warnings = _extract_variables(sources, endpoints)
     warnings.extend(secret_warnings)
     associations = _associate(test_cases, endpoints)
-    coverage_source_text = "\n".join(source.get("text", "") for source in sources)
-    has_cases_file = any(source.get("is_cases_file") or source.get("extension", "").lower() in {".xlsx", ".csv"} for source in sources)
+    coverage_source_text = "\n".join(source.get("text", "") for source in sources
+                                     if source.get("extension", "").lower() in {".docx", ".pdf", ".txt", ".md"})
     if has_cases_file:
         generated_cases = []
         case_adjustments = {"added": [], "extra": []}
@@ -971,17 +1125,6 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
     if generated_cases:
         test_cases.extend(generated_cases)
         associations = _associate(test_cases, endpoints)
-    endpoint_by_id = {endpoint.get("id"): endpoint for endpoint in endpoints}
-    case_by_id = {case.get("id"): case for case in test_cases}
-    for association in associations:
-        case = case_by_id.get(association.get("case_id"), {})
-        endpoint = endpoint_by_id.get(association.get("endpoint_id"), {})
-        body_raw = str((endpoint.get("body") or {}).get("raw") or "")
-        if case.get("generated") and (
-            "error" in str(case.get("name", "")).lower()
-            or re.search(r"(?i)todo|completar", body_raw)
-        ):
-            association["included"] = False
     endpoint_by_id = {endpoint.get("id"): endpoint for endpoint in endpoints}
     case_by_id = {case.get("id"): case for case in test_cases}
     for association in associations:
@@ -1028,17 +1171,17 @@ def build_intermediate_model(sources: List[Dict[str, Any]], manual_text: str = "
 
 
 def _postman_url(endpoint: Dict[str, Any]) -> Dict[str, Any]:
-    base = endpoint.get("base_url", "")
+    base = endpoint.get("base_url") or "{{baseUrl}}"
     path = endpoint.get("path", "")
-    path = re.sub(r"\{([A-Za-z0-9_.-]+)\}", lambda match: "{{" + _safe_key(match.group(1)) + "}}", path)
-    raw = (base.rstrip("/") + "/" + path.lstrip("/")).strip("/") if base else path
-    if base.startswith("{{"):
-        raw = base.rstrip("/") + "/" + path.lstrip("/")
+    path = re.sub(r"(?<!\{)\{([A-Za-z0-9_.-]+)\}(?!\})", lambda match: "{{" + _safe_key(match.group(1)) + "}}", path)
+    raw = base.rstrip("/") + "/" + path.lstrip("/")
     query = [
         {"key": item.get("key", ""), "value": item.get("value") or "{{" + _safe_key(str(item.get("key") or "param")) + "}}", "description": item.get("description", "")}
         for item in endpoint.get("query_params", [])
     ]
-    return {"raw": raw or "{{baseUrl}}/", "host": [base or "{{baseUrl}}"], "path": [part for part in path.strip("/").split("/") if part], "query": query}
+    if query:
+        raw += "?" + "&".join(f"{quote(str(item['key']), safe='')}={quote(str(item['value']), safe='{}')}" for item in query)
+    return {"raw": raw, "host": [base], "path": [part for part in path.strip("/").split("/") if part], "query": query}
 
 
 def _postman_body(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1058,6 +1201,177 @@ def _postman_body(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"mode": "raw", "raw": str(body.get("raw", ""))}
 
 
+PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z0-9_.-]+)\}\}")
+CREDENTIAL_RE = re.compile(r"(?i)pass|contrase|secret|token|authorization|api.?key|cookie|credential")
+PERSONAL_RE = re.compile(r"(?i)cuit|cuil|dni|document|email|client|cliente|asegurad|person|persona|first.?name|last.?name|nombre|apellido|phone|telefono|direccion|address")
+QUERYABLE_RE = re.compile(r"(?i)poliz|policy|siniest|claim|client|cliente|asegurad|cuit|cuil|dni|ramo|branch|product|producto|certific|fecha|date|vigenc|cobertura|coverage|tomador|intermediar")
+FIELD_ALIASES = {"password": ("contrasena", "clave"), "username": ("usuario", "user"), "policy": ("poliza",), "client": ("cliente",)}
+
+
+def _normalized_field(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(value or "").lower())
+    return re.sub(r"[^a-z0-9]", "", "".join(char for char in normalized if not unicodedata.combining(char)))
+
+
+def _matches_field(left: str, right: str) -> bool:
+    first, second = _normalized_field(left), _normalized_field(right)
+    if first == second:
+        return True
+    aliases = FIELD_ALIASES.get(first, ()) + FIELD_ALIASES.get(second, ())
+    return first in aliases or second in aliases
+
+
+def _case_inputs(case: Optional[Dict[str, Any]]) -> Tuple[Dict[str, Any], str]:
+    raw = (case or {}).get("input_data") or {}
+    if isinstance(raw, dict):
+        return raw, ""
+    if not isinstance(raw, str) or not raw.strip():
+        return {}, ""
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return parsed, ""
+    except (TypeError, ValueError):
+        pass
+    values: Dict[str, str] = {}
+    for segment in re.split(r";|\n|,(?=\s*[\wÀ-ÿ .-]+\s*[:=])", raw):
+        match = re.match(r"^\s*([\wÀ-ÿ .-]+?)\s*[:=]\s*(.*?)\s*$", segment)
+        if match:
+            values[match.group(1).strip()] = match.group(2).strip()
+    return values, "" if values else raw.strip()
+
+
+def _case_omits(case: Optional[Dict[str, Any]], field: str) -> bool:
+    if not case:
+        return False
+    text = " ".join((str(case.get("name") or ""), str(case.get("input_data") or ""), str(case.get("description") or "")))
+    normalized = unicodedata.normalize("NFKD", text.lower())
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    candidates = [field, *FIELD_ALIASES.get(_normalized_field(field), ())]
+    return any(re.search(r"\b(?:omitir|sin|no enviar|no incluir)\s+(?:(?:el|la|campo|dato)\s+)?" + re.escape(candidate.lower()) + r"\b", normalized) for candidate in candidates)
+
+
+def _case_value(values: Dict[str, Any], field: str, used: set) -> Any:
+    for key, value in values.items():
+        if _matches_field(key, field):
+            used.add(key)
+            return value
+    return None
+
+
+def _register_variable(registry: Dict[str, Dict[str, Any]], key: str, value: Any, reason: str, context: str = "", sensitive: bool = False) -> str:
+    key = key if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", key) else _safe_key(key)
+    text_value = "" if value is None else str(value)
+    if PLACEHOLDER_RE.fullmatch(text_value):
+        text_value = ""
+    secret = sensitive or bool(CREDENTIAL_RE.search(key) or PERSONAL_RE.search(key))
+    if key not in registry:
+        registry[key] = {"key": key, "value": "" if secret else text_value, "sensitive": secret,
+                         "reason": reason, "context": context, "queryable": bool(QUERYABLE_RE.search(key) and not CREDENTIAL_RE.search(key))}
+    return key
+
+
+def _case_prefix(case: Optional[Dict[str, Any]], endpoint: Dict[str, Any]) -> str:
+    identity = (case or {}).get("case_id") or endpoint.get("id") or "request"
+    return re.sub(r"[^a-z0-9]+", "_", str(identity).lower()).strip("_") or "request"
+
+
+def _choose_template(endpoint: Dict[str, Any], case: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    variants = [endpoint] + endpoint.get("variants", [])
+    if not case or len(variants) == 1:
+        return endpoint
+    name = unicodedata.normalize("NFKD", str(case.get("name") or "").lower())
+    case_words = set(re.findall(r"[a-z0-9]{4,}", "".join(char for char in name if not unicodedata.combining(char))))
+    def score(variant: Dict[str, Any]) -> int:
+        text = (variant.get("name", "") + " " + variant.get("folder", "")).lower()
+        return sum(1 for word in re.findall(r"[a-z0-9]{4,}", text) if word in case_words)
+    return max(variants, key=score)
+
+
+def _prepare_body(body: Dict[str, Any], case: Optional[Dict[str, Any]], endpoint: Dict[str, Any],
+                  case_values: Dict[str, Any], used_inputs: set, registry: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    result = _postman_body(body)
+    if result is None:
+        if case_values and endpoint.get("method") in {"POST", "PUT", "PATCH"} and isinstance((case or {}).get("input_data"), str):
+            raw = (case or {}).get("input_data", "")
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    result = {"mode": "raw", "raw": json.dumps(parsed, ensure_ascii=False), "options": {"raw": {"language": "json"}}}
+                    used_inputs.update(case_values)
+            except (TypeError, ValueError):
+                pass
+        if result is None:
+            return None
+    prefix = _case_prefix(case, endpoint)
+    if result.get("mode") == "raw":
+        raw = result.get("raw") or ""
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            if raw and not PLACEHOLDER_RE.search(raw):
+                key = _register_variable(registry, f"{prefix}_body", raw, "Body del request", (case or {}).get("name", endpoint.get("name", "")))
+                result["raw"] = "{{" + key + "}}"
+            return result
+        numeric_keys = set()
+        def walk(value: Any, path: List[str]) -> Any:
+            if isinstance(value, dict):
+                return {key: walk(item, path + [key]) for key, item in value.items() if not _case_omits(case, key)}
+            if isinstance(value, list):
+                return [walk(item, path + [str(index)]) for index, item in enumerate(value)]
+            field = path[-1] if path else "body"
+            override = _case_value(case_values, field, used_inputs)
+            has_override = any(_matches_field(key, field) for key in case_values)
+            selected = override if has_override else value
+            if selected is None or isinstance(selected, bool):
+                return selected
+            placeholder = PLACEHOLDER_RE.fullmatch(str(selected))
+            if placeholder:
+                _register_variable(registry, placeholder.group(1), "", f"Campo {field}", (case or {}).get("name", ""))
+                return str(selected)
+            key = _register_variable(registry, f"{prefix}_{'_'.join(path)}", selected, f"Campo {field} del body", (case or {}).get("name", endpoint.get("name", "")))
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                numeric_keys.add(key)
+            return "{{" + key + "}}"
+        parsed = walk(parsed, [])
+        result["raw"] = json.dumps(parsed, ensure_ascii=False, indent=2)
+        for key in numeric_keys:
+            result["raw"] = result["raw"].replace('"{{' + key + '}}"', '{{' + key + '}}')
+    elif result.get("mode") in {"formdata", "urlencoded"}:
+        for entry in result.get(result["mode"], []):
+            if entry.get("type") == "file":
+                continue
+            field = str(entry.get("key") or "dato")
+            override = _case_value(case_values, field, used_inputs)
+            selected = override if override is not None else entry.get("value", "")
+            placeholder = PLACEHOLDER_RE.fullmatch(str(selected))
+            key = placeholder.group(1) if placeholder else f"{prefix}_{field}"
+            key = _register_variable(registry, key, "" if placeholder else selected, f"Campo {field} del formulario", (case or {}).get("name", ""))
+            entry["value"] = "{{" + key + "}}"
+    return result
+
+
+def _prepare_auth(auth: Dict[str, Any], registry: Dict[str, Dict[str, Any]], context: str) -> Dict[str, Any]:
+    result = deepcopy(auth or {"type": "inherit"})
+    mode = result.get("type")
+    for field in ("bearer", "basic", "apikey", "oauth2"):
+        for entry in result.get(field) or []:
+            if not isinstance(entry, dict) or "value" not in entry:
+                continue
+            name = str(entry.get("key") or field)
+            if mode == "bearer" and name == "token":
+                name = "bearerToken"
+            if mode == "apikey" and name == "value":
+                name = "apiKey"
+            value = str(entry.get("value") or "")
+            if mode == "apikey" and entry.get("key") in {"key", "in"}:
+                continue
+            placeholder = PLACEHOLDER_RE.fullmatch(value)
+            key = _register_variable(registry, placeholder.group(1) if placeholder else name, "", f"Autenticación {mode}", context, sensitive=True)
+            entry["value"] = "{{" + key + "}}"
+    return result
+
+
 def _tests_for_endpoint(endpoint: Dict[str, Any], case: Optional[Dict[str, Any]] = None) -> str:
     statuses = {
         str(resp.get("status"))
@@ -1075,14 +1389,21 @@ def _tests_for_endpoint(endpoint: Dict[str, Any], case: Optional[Dict[str, Any]]
             f"  pm.response.to.have.status({case_status});",
             "});",
         ])
-    elif statuses and not (case and case.get("generated") and "error" in str(case.get("name", "")).lower()):
+    elif case:
+        case_text = _case_blob(case)
+        negative = case.get("test_type") in {"negativo", "negative", "seguridad", "security"} or bool(re.search(r"(?i)\b(?:error|rechaz\w*|inv[aá]lid\w*|incorrect\w*|sin\s+\w+|omitir|no autorizado)\b", case_text))
+        status_family = 4 if negative else 2
+        lines.extend([
+            f"pm.test('La respuesta pertenece a HTTP {status_family}xx', function () {{",
+            f"  pm.expect(pm.response.code).to.be.within({status_family}00, {status_family}99);",
+            "});",
+        ])
+    elif statuses:
         lines.extend([
             "pm.test('La respuesta coincide con un status documentado', function () {",
             f"  pm.expect([{', '.join(sorted(statuses))}]).to.include(pm.response.code);",
             "});",
         ])
-    elif case:
-        lines.append("// Pendiente QA: traducir el resultado esperado a una asercion de status/body confirmada.")
     expected_response = (case or {}).get("expected_response")
     if expected_response:
         try:
@@ -1101,19 +1422,29 @@ def _tests_for_endpoint(endpoint: Dict[str, Any], case: Optional[Dict[str, Any]]
     return "\n".join(lines)
 
 
-def build_collection(model: Dict[str, Any]) -> Dict[str, Any]:
+def _build_artifacts(model: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
     associations = model.get("associations", [])
     cases = model.get("test_cases", [])
+    case_by_id = {case.get("id"): case for case in cases}
     cases_by_endpoint: Dict[str, List[Dict[str, Any]]] = {}
     associated_endpoint_ids = set()
     for association in associations:
-        case = next((item for item in cases if item.get("id") == association.get("case_id")), None)
+        case = case_by_id.get(association.get("case_id"))
         endpoint_id = association.get("endpoint_id")
         if case and endpoint_id:
             associated_endpoint_ids.add(endpoint_id)
         if case and endpoint_id and association.get("included", True):
             cases_by_endpoint.setdefault(endpoint_id, []).append(case)
+    registry: Dict[str, Dict[str, Any]] = {}
+    for variable in model.get("variables", []):
+        _register_variable(registry, str(variable.get("key") or "variable"), variable.get("value"),
+                           str(variable.get("reason") or "Variable de la fuente"), str(variable.get("source") or ""),
+                           bool(variable.get("sensitive")))
     folders: Dict[str, List[Dict[str, Any]]] = {}
+    issues: List[str] = []
+    used_vars = {var["key"] for var in registry.values() if var.get("reason") == "Variable importada desde la fuente"}
+    supplied_by_script = set()
+    request_count = 0
     for endpoint in model.get("endpoints", []):
         if endpoint.get("status") in {"disabled", "blocked"}:
             continue
@@ -1122,68 +1453,146 @@ def build_collection(model: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if endpoint.get("id") in associated_endpoint_ids and not endpoint_cases:
             continue
-        # Keep an explicit draft request when the source has no associated case.
         request_cases = endpoint_cases or [None]
         for case in request_cases:
+            template = deepcopy(_choose_template(endpoint, case))
+            inputs, opaque_inputs = _case_inputs(case)
+            used_inputs: set = set()
+            prefix = _case_prefix(case, endpoint)
+            for parameter in template.get("path_params", []):
+                field = str(parameter.get("key") or "")
+                if not field:
+                    continue
+                override = _case_value(inputs, field, used_inputs)
+                if override is not None:
+                    key = _register_variable(registry, f"{prefix}_{field}", override, f"Parámetro de ruta {field}", (case or {}).get("name", ""))
+                    template["path"] = template["path"].replace("{" + field + "}", "{{" + key + "}}")
+            query_params = []
+            for parameter in template.get("query_params", []):
+                field = str(parameter.get("key") or "")
+                if _case_omits(case, field):
+                    continue
+                value = str(parameter.get("value") or "")
+                override = _case_value(inputs, field, used_inputs)
+                placeholder = PLACEHOLDER_RE.fullmatch(value)
+                key = f"{prefix}_{field}" if override is not None else placeholder.group(1) if placeholder else field
+                key = _register_variable(registry, key, override if override is not None else "" if placeholder else value,
+                                         f"Parámetro de consulta {field}", (case or {}).get("name", endpoint.get("name", "")))
+                query_params.append({**parameter, "value": "{{" + key + "}}"})
+            template["query_params"] = query_params
+            headers = []
+            for header in template.get("headers", []):
+                field = str(header.get("key") or "")
+                if _case_omits(case, field):
+                    continue
+                value = str(header.get("value") or "")
+                if CREDENTIAL_RE.search(field) or PERSONAL_RE.search(field):
+                    placeholder = PLACEHOLDER_RE.fullmatch(value)
+                    key = _register_variable(registry, placeholder.group(1) if placeholder else field, "", f"Header {field}", (case or {}).get("name", ""), True)
+                    value = "{{" + key + "}}"
+                headers.append({**header, "value": value})
             request: Dict[str, Any] = {
-                "method": endpoint.get("method", "GET"),
-                "header": endpoint.get("headers", []),
-                "url": _postman_url(endpoint),
-                "description": "\n\n".join(filter(None, [endpoint.get("description", ""), (case or {}).get("description", ""), (case or {}).get("expected_result", "")])),
+                "method": template.get("method", "GET"),
+                "header": headers,
+                "url": _postman_url(template),
+                "description": "\n\n".join(filter(None, [template.get("description", ""), (case or {}).get("objective", ""), (case or {}).get("expected_result", "")])),
             }
             case_body = (case or {}).get("request_body")
-            body_source = endpoint.get("body") or {}
+            body_source = template.get("body") or {}
             if case_body:
                 try:
                     parsed_body = json.loads(case_body) if isinstance(case_body, str) else case_body
                     body_source = {"mode": "raw", "raw": json.dumps(parsed_body, ensure_ascii=False, indent=2), "content_type": "application/json"}
                 except (TypeError, ValueError):
                     body_source = {"mode": "raw", "raw": str(case_body), "content_type": "application/json"}
-            body = _postman_body(body_source)
+            body = _prepare_body(body_source, case, template, inputs, used_inputs, registry)
             if body:
                 request["body"] = body
-            auth = endpoint.get("auth") or {"type": "inherit"}
+                if body.get("mode") == "file" or any(entry.get("type") == "file" for entry in body.get("formdata", [])):
+                    issues.append(f"{(case or {}).get('name', template.get('name', 'Request'))}: seleccionar archivo local en Postman.")
+            auth = _prepare_auth(template.get("auth") or {}, registry, template.get("name", ""))
             if auth.get("type") and auth.get("type") != "inherit":
                 request["auth"] = auth
-            endpoint_name = endpoint.get("name") or f"{endpoint.get('method')} {endpoint.get('path')}"
+            endpoint_name = template.get("name") or f"{template.get('method')} {template.get('path')}"
             case_name = (case or {}).get("name") or "Pendiente: asociar caso y expectativa"
+            events = []
+            for event in template.get("events") or []:
+                if not isinstance(event, dict):
+                    continue
+                script = event.get("script") or {}
+                code = "\n".join(script.get("exec") or []) if isinstance(script.get("exec"), list) else str(script.get("exec") or "")
+                if SECRET_RE.search(code):
+                    issues.append(f"{case_name}: un script de origen contiene un posible secreto y requiere revisión manual.")
+                    continue
+                supplied_by_script.update(re.findall(r"pm\.(?:environment|collectionVariables)\.set\(\s*['\"]([A-Za-z0-9_.-]+)['\"]", code))
+                events.append(deepcopy(event))
+            events.append({"listen": "test", "script": {"type": "text/javascript", "exec": _tests_for_endpoint(template, case).splitlines()}})
             item = {
                 "name": case_name if case else f"Pendiente QA - {endpoint_name}",
                 "request": request,
-                "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": _tests_for_endpoint(endpoint, case).splitlines()}}],
+                "event": events,
             }
-            folder = endpoint.get("folder") or "Casos de prueba"
+            if case and opaque_inputs and not any(_case_omits(case, field) for field in re.findall(r"[A-Za-z0-9_]+", json.dumps(template, ensure_ascii=False))):
+                issues.append(f"{case_name}: revisar cómo aplicar los datos de prueba: {opaque_inputs[:120]}")
+            unmatched = [key for key in inputs if key not in used_inputs]
+            if unmatched:
+                issues.append(f"{case_name}: datos sin campo equivalente en el request: {', '.join(unmatched[:8])}.")
+            if case and not case.get("expected_status"):
+                issues.append(f"{case_name}: confirmar el status HTTP exacto; se agregó una validación general 2xx/4xx.")
+            used_vars.update(PLACEHOLDER_RE.findall(json.dumps(request, ensure_ascii=False)))
+            for event in events:
+                script = event.get("script") or {}
+                code = "\n".join(script.get("exec") or []) if isinstance(script.get("exec"), list) else str(script.get("exec") or "")
+                used_vars.update(re.findall(r"pm\.(?:environment|collectionVariables)\.get\(\s*['\"]([A-Za-z0-9_.-]+)['\"]", code))
+            folder = template.get("folder") or "Casos de prueba"
             folders.setdefault(folder, []).append(item)
-    return {
+            request_count += 1
+    for key in used_vars:
+        if key not in registry:
+            _register_variable(registry, key, "", "Valor usado por el request")
+    variables = [registry[key] for key in sorted(used_vars) if key in registry]
+    missing_data = [{"key": var["key"], "reason": var["reason"], "context": var["context"], "queryable": var["queryable"]}
+                    for var in variables if not var["value"] and var["key"] not in supplied_by_script]
+    queryable = [item for item in missing_data if item["queryable"]]
+    query_request = ""
+    if queryable:
+        items = [f"- {item['key']}: {item['reason']}" for item in queryable[:30]]
+        query_request = ("Necesito una consulta Oracle SELECT de solo lectura para encontrar datos de prueba para la collection "
+                         + str(model.get("project_name") or "API") + ". No ejecutes la consulta; devolvé solo la query para revisión manual. "
+                         "Usá únicamente tablas y relaciones del catálogo y las definiciones funcionales guardadas. "
+                         "Si falta una regla necesaria, preguntámela. Datos pendientes:\n" + "\n".join(items))[:8000]
+    collection = {
         "info": {
             "name": model.get("project_name") or "Coleccion QA generada",
             "schema": POSTMAN_SCHEMA,
             "description": "Generada por QA Doc Analyzer desde documentacion, casos y fuentes adjuntas.",
         },
         "item": [{"name": name, "item": items} for name, items in folders.items()],
-        "variable": [
-            {"key": var["key"], "value": "" if var.get("sensitive") else var.get("value", ""), "type": "string"}
-            for var in model.get("variables", [])
-        ],
+        "variable": [],
     }
-
-
-def build_environment(model: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+    environment = {
         "name": f"{model.get('project_name') or 'QA'} Environment",
-        "values": [
-            {
-                "key": var["key"],
-                "value": "" if var.get("sensitive") else var.get("value", ""),
-                "type": "secret" if var.get("sensitive") else "default",
-                "enabled": bool(var.get("enabled", True)),
-            }
-            for var in model.get("variables", [])
-            if var.get("scope") in {"environment", ""}
-        ],
+        "values": [{"key": var["key"], "value": var["value"], "type": "secret" if var["sensitive"] else "default",
+                    "enabled": True, "description": ("Pendiente: " if not var["value"] else "") + var["reason"] + (" | " + var["context"] if var["context"] else "")}
+                   for var in variables],
         "_postman_variable_scope": "environment",
         "_postman_exported_using": "QA Doc Analyzer",
     }
+    readiness = {"request_count": request_count, "missing_data": missing_data, "manual_checks": list(dict.fromkeys(issues)),
+                 "query_request": query_request}
+    return collection, environment, readiness
+
+
+def build_collection(model: Dict[str, Any]) -> Dict[str, Any]:
+    return _build_artifacts(model)[0]
+
+
+def build_environment(model: Dict[str, Any]) -> Dict[str, Any]:
+    return _build_artifacts(model)[1]
+
+
+def build_readiness(model: Dict[str, Any]) -> Dict[str, Any]:
+    return _build_artifacts(model)[2]
 
 
 def build_traceability(model: Dict[str, Any]) -> str:
@@ -1305,6 +1714,8 @@ async def analyze_postman_sources(
     total_text_chars = len(manual_text)
     for file in files or []:
         source = await _read_upload(file)
+        if source.get("warning") or not source.get("text", "").strip():
+            raise HTTPException(status_code=422, detail=f"No pude leer {source['name']} por completo. Revisá el formato del archivo.")
         total_bytes += source["size"]
         total_text_chars += len(source["text"])
         if total_bytes > MAX_TOTAL_SOURCE_BYTES:
@@ -1315,6 +1726,8 @@ async def analyze_postman_sources(
     case_source = None
     if test_cases_file and test_cases_file.filename:
         case_source = await _read_upload(test_cases_file)
+        if case_source.get("warning") or not case_source.get("text", "").strip():
+            raise HTTPException(status_code=422, detail=f"No pude leer el archivo de casos {case_source['name']}.")
         if total_bytes + case_source["size"] > MAX_TOTAL_SOURCE_BYTES:
             raise HTTPException(status_code=413, detail="El conjunto de archivos supera el límite de 40 MB.")
         if total_text_chars + len(case_source["text"]) > MAX_TOTAL_SOURCE_TEXT_CHARS:
@@ -1323,14 +1736,27 @@ async def analyze_postman_sources(
         sources.append(case_source)
     if not sources and not manual_text.strip():
         raise HTTPException(status_code=400, detail="Carga al menos un archivo o texto.")
-    model = build_intermediate_model(sources, manual_text)
+    model = await run_in_threadpool(build_intermediate_model, sources, manual_text)
+    if not model["endpoints"]:
+        raise HTTPException(status_code=422, detail="No encontré endpoints en los archivos. Subí una collection, un request JSON, OpenAPI o cURL válido.")
+    if case_source and not model["test_cases"]:
+        raise HTTPException(status_code=422, detail=f"No encontré casos de prueba en {case_source['name']}. Revisá encabezados e IDs del Excel/CSV.")
+    if case_source:
+        case_by_id = {case["id"]: case for case in model["test_cases"]}
+        unmatched = [case_by_id[item["case_id"]].get("name", item["case_id"])
+                     for item in model["associations"] if (not item.get("endpoint_id") or not item.get("confirmed")) and item.get("case_id") in case_by_id]
+        if unmatched:
+            raise HTTPException(status_code=422, detail="No pude asociar estos casos a endpoints: " + "; ".join(unmatched[:10]) + ". Agregá método y ruta en la columna Endpoint.")
     model["project_name"] = _clean(project_name, 180) or "Proyecto API"
     if case_source:
         model["cases_source"] = {
             "name": case_source["name"],
             "detected_cases": len([case for case in model["test_cases"] if case.get("source_refs", [{}])[0].get("source") == case_source["name"]]),
         }
-    model["validation"] = validate_model(model)
+    model["validation"] = await run_in_threadpool(validate_model, model)
+    if not model["validation"]["valid"]:
+        raise HTTPException(status_code=422, detail="La collection no es válida: " + "; ".join(model["validation"]["errors"][:5]))
+    model["readiness"] = await run_in_threadpool(build_readiness, model)
     now = _now()
     doc = {
         "project_name": _clean(project_name, 180) or "Proyecto API",
@@ -1381,6 +1807,7 @@ async def update_draft(draft_id: str, payload: DraftUpdate, user: Dict[str, Any]
     model.update(update_data)
     model["project_name"] = doc.get("project_name") or model.get("project_name") or "Proyecto API"
     model["validation"] = validate_model(model)
+    model["readiness"] = build_readiness(model)
     await _db()[COLLECTION].update_one({"_id": doc["_id"]}, {"$set": {"model": model, "updated_at": _now()}})
     doc["model"] = model
     await record_activity(
@@ -1416,7 +1843,7 @@ async def download_generated(kind: str, draft_id: str, user: Dict[str, Any] = De
     _require_qa(user)
     doc = await _get_draft(draft_id, user)
     model = doc.get("model") or {}
-    label = "ZIP completo" if kind == "zip" else kind
+    label = "Collection y environment" if kind == "bundle" else "ZIP completo" if kind == "zip" else kind
     await record_activity(
         user,
         "Descarga Postman",
@@ -1430,17 +1857,18 @@ async def download_generated(kind: str, draft_id: str, user: Dict[str, Any] = De
             "casos": len(model.get("test_cases", [])),
         },
     )
-    if kind == "zip":
+    if kind in {"zip", "bundle"}:
         output = BytesIO()
         with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
-            for item_kind in ("collection", "environment", "readme", "traceability"):
+            kinds = ("collection", "environment") if kind == "bundle" else ("collection", "environment", "readme", "traceability")
+            for item_kind in kinds:
                 filename, content, _ = _file_payload(item_kind, model)
                 zf.writestr(filename, content)
         output.seek(0)
         return StreamingResponse(
             output,
             media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{OUTPUT_NAME}.zip"'},
+            headers={"Content-Disposition": f'attachment; filename="{OUTPUT_NAME if kind == "zip" else "postman_collection_environment"}.zip"'},
         )
     filename, content, media_type = _file_payload(kind, model)
     if media_type.startswith("text"):

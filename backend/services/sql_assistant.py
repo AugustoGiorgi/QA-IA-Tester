@@ -42,6 +42,7 @@ Si falta una definición funcional que cambia el resultado (por ejemplo, qué si
 No vuelvas a preguntar algo respondido en el historial o definido en la base de conocimiento.
 Las respuestas del chat normal nunca se guardan como conocimiento. Si una definición funcional no está en el contexto, preguntala y usá la respuesta solamente para completar esta conversación. Las definiciones reutilizables se agregan por separado desde la sección Conocimiento.
 Cuando tengas información suficiente, devolvé una consulta Oracle de solo lectura, de una única sentencia SELECT, con columnas explícitas, joins respaldados por las relaciones del catálogo y variables bind (:nombre) para valores que la persona deba completar. No uses SELECT * ni DML/DDL. No uses WITH.
+No uses SELECT INTO, FOR UPDATE, paquetes PL/SQL ni funciones con efectos secundarios. La consulta nunca se ejecuta desde esta aplicación.
 Si el pedido es ambiguo pero no bloquea una consulta segura, exponé la suposición en assumptions. No agregues datos reales ni valores sensibles.
 Si necesitás una aclaración, preguntá una sola cosa a la vez. Respondé exclusivamente JSON con esta forma: {"status":"question"|"ready","reply":"texto breve en español","sql":"SELECT... o cadena vacía","assumptions":["..."]}."""
 
@@ -222,6 +223,8 @@ def _validate_select(sql: str) -> str:
     forbidden = re.search(r"(?i)\b(insert|update|delete|merge|drop|alter|create|truncate|grant|revoke|commit|rollback|execute|exec|call|begin)\b", scan)
     if forbidden:
         raise ValueError("La consulta incluye una operación que no es de solo lectura.")
+    if re.search(r"(?i)\b(?:into|for\s+update)\b|\b(?:dbms|utl)_[a-z0-9_]*\s*\.", scan):
+        raise ValueError("La consulta incluye una operación o paquete no permitido.")
     if re.search(r"(?i)\bselect\s+(?:[a-z0-9_$#]+\s*\.\s*)?\*", scan):
         raise ValueError("La consulta debe enumerar columnas y no usar SELECT *.")
     return cleaned

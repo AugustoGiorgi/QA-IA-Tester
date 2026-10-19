@@ -22,22 +22,11 @@
     }
 
     body.module-page {
-      background:
-        radial-gradient(circle at 88% -12%, rgba(37, 99, 235, .18), transparent 28rem),
-        linear-gradient(180deg, #0b1530 0%, var(--pm-bg) 58%);
+      background: var(--pm-bg);
     }
 
     body.module-page .module-container {
-      padding: 26px;
-    }
-
-    body.module-page .page-head {
-      margin-bottom: 18px;
-      padding-bottom: 18px;
-    }
-
-    body.module-page .page-head h1 {
-      font-size: clamp(2rem, 3vw, 2.7rem);
+      padding: 16px;
     }
 
     .postman-grid {
@@ -48,16 +37,13 @@
     }
 
     .postman-panel {
-      border: 1px solid var(--pm-line);
-      border-radius: 10px;
-      background: linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(8, 17, 31, .95));
-      box-shadow: 0 18px 55px rgba(0, 0, 0, .2);
+      min-width: 0;
     }
 
     .postman-form {
       display: grid;
       gap: 16px;
-      padding: 24px;
+      padding: 8px 0 24px;
     }
 
     .postman-result {
@@ -105,9 +91,7 @@
       border: 2px dashed rgba(96, 165, 250, .56);
       border-radius: 10px;
       box-sizing: border-box;
-      background:
-        radial-gradient(circle at top, rgba(37, 99, 235, .18), transparent 62%),
-        rgba(8, 17, 31, .66);
+      background: rgba(8, 17, 31, .66);
       color: var(--pm-text);
       text-align: center;
       cursor: pointer;
@@ -257,6 +241,13 @@
     .pm-result-message strong { color: #bbf7d0; }
     .pm-result-actions { display: flex; flex-wrap: wrap; gap: 10px; }
     .pm-result-actions button { width: auto !important; min-height: 42px; padding: 0 15px !important; }
+    .pm-pending { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--pm-line); color: #dbeafe; font-size: .86rem; }
+    .pm-pending[hidden], .pm-result-actions button[hidden] { display: none !important; }
+    .pm-pending strong { color: #f8fafc; }
+    .pm-pending ul { margin: 0; padding-left: 20px; line-height: 1.5; overflow-wrap: anywhere; }
+    .pm-pending .pm-secondary { justify-self: start; width: auto !important; }
+    .pm-pending details { color: var(--pm-muted); }
+    .pm-pending summary { cursor: pointer; }
 
     .pm-empty {
       display: grid;
@@ -422,24 +413,25 @@
         position: static;
       }
     }
+
+    @media (max-width: 600px) {
+      .pm-dropzone { padding: 18px 14px; }
+      .pm-result-actions button { width: 100% !important; }
+    }
   </style>
 </head>
 <body class="module-page">
   <main class="module-container">
-    <header class="page-head">
-      <h1>Postman</h1>
-    </header>
-
-    <section class="postman-grid">
+    <section class="postman-grid" aria-label="Postman">
       <form id="postmanForm" class="postman-panel postman-form">
         <label class="pm-dropzone" id="postmanDropzone">
           <span class="pm-icon">↓</span>
           <span class="pm-upload-title">
             <strong>Soltá acá los archivos o seleccioná desde tu equipo</strong>
-            <small>Obligatorio: una collection JSON · Opcional: un Excel o CSV con los casos</small>
+            <small>Collections o requests JSON, OpenAPI, cURL, funcional DOCX/PDF y casos XLSX/CSV</small>
           </span>
-          <span id="sourceSummary" class="pm-files">Collection y casos todavía no seleccionados</span>
-          <input id="sourceFiles" type="file" multiple accept=".json,.xlsx,.csv" />
+          <span id="sourceSummary" class="pm-files">Archivos todavía no seleccionados</span>
+          <input id="sourceFiles" type="file" multiple accept=".json,.yaml,.yml,.txt,.md,.curl,.http,.docx,.pdf,.xlsx,.csv" />
         </label>
 
         <label for="projectName">Nombre de la collection
@@ -455,15 +447,21 @@
         <div id="resultPanel" class="pm-result-message" hidden>
           <strong>Archivos generados</strong>
           <div class="pm-result-actions">
-            <button class="pm-primary" id="downloadPostmanCollection" type="button">Descargar collection.json</button>
-            <button class="pm-secondary" id="downloadPostmanEnvironment" type="button">Descargar environment.json</button>
+            <button class="pm-primary" id="downloadPostmanBundle" type="button">Descargar collection y environment</button>
             <button class="pm-secondary" id="newPostmanCollection" type="button">Nueva collection</button>
           </div>
+          <section id="missingPanel" class="pm-pending" hidden>
+            <strong id="missingSummary"></strong>
+            <ul id="missingList"></ul>
+            <details id="moreMissing" hidden><summary id="moreMissingSummary"></summary><ul id="moreMissingList"></ul></details>
+            <button id="getDataQuery" class="pm-secondary" type="button" hidden>Conseguir query para datos</button>
+            <details id="manualDetails" hidden><summary>Otras verificaciones pendientes</summary><ul id="manualList"></ul></details>
+          </section>
         </div>
       </form>
     </section>
   </main>
 
-  <script type="module" src="/app/js/postman.js?v=20261001-4"></script>
+  <script type="module" src="/app/js/postman.js?v=20261019-1"></script>
 </body>
 </html>

@@ -17,12 +17,8 @@ function selectedFiles() {
 
 function updateSourceSummary() {
   const files = selectedFiles();
-  const collection = files.find(file => file.name.toLowerCase().endsWith('.json'));
-  const cases = files.find(file => /\.(xlsx|csv)$/i.test(file.name));
-  const parts = [];
-  if (collection) parts.push(`<span class="pm-file-chip">Collection: ${escapeHtml(collection.name)}</span>`);
-  if (cases) parts.push(`<span class="pm-file-chip">Casos: ${escapeHtml(cases.name)}</span>`);
-  $('sourceSummary').innerHTML = parts.join('') || 'Collection y casos todavía no seleccionados';
+  $('sourceSummary').innerHTML = files.map(file => `<span class="pm-file-chip">${/\.(xlsx|csv)$/i.test(file.name) ? 'Casos: ' : ''}${escapeHtml(file.name)}</span>`).join('') || 'Archivos todavía no seleccionados';
+  currentDraft = null;
   $('resultPanel').hidden = true;
 }
 
@@ -32,9 +28,29 @@ function escapeHtml(value = '') {
 
 function renderResult() {
   $('resultPanel').hidden = false;
-  $('downloadPostmanCollection').onclick = () => downloadFile('collection');
-  $('downloadPostmanEnvironment').onclick = () => downloadFile('environment');
+  $('downloadPostmanBundle').onclick = () => downloadFile('bundle');
   $('newPostmanCollection').onclick = startNewCollection;
+  const readiness = currentDraft?.model?.readiness || {};
+  const missing = readiness.missing_data || [];
+  const checks = readiness.manual_checks || [];
+  $('missingPanel').hidden = !missing.length && !checks.length;
+  $('missingSummary').textContent = missing.length ? `${missing.length} dato${missing.length === 1 ? '' : 's'} por completar en el environment antes de ejecutar` : 'Revisiones pendientes antes de ejecutar';
+  const missingLine = item => `<li><strong>${escapeHtml(item.key)}</strong> · ${escapeHtml(item.reason)}${item.context ? ` · ${escapeHtml(item.context)}` : ''}</li>`;
+  $('missingList').innerHTML = missing.slice(0, 6).map(missingLine).join('');
+  $('moreMissing').hidden = missing.length <= 6;
+  $('moreMissingSummary').textContent = `Ver los ${missing.length - 6} datos restantes`;
+  $('moreMissingList').innerHTML = missing.slice(6).map(missingLine).join('');
+  $('manualDetails').hidden = !checks.length;
+  $('manualList').innerHTML = checks.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+  $('getDataQuery').hidden = !readiness.query_request;
+  $('getDataQuery').onclick = () => {
+    sessionStorage.setItem('qaSqlPrefillV1', readiness.query_request);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'qa:navigate', view: 'sql-query' }, window.location.origin);
+    } else {
+      window.location.assign('/app/sql-query.html');
+    }
+  };
 }
 
 function startNewCollection() {
@@ -50,7 +66,7 @@ function startNewCollection() {
 
 async function downloadFile(kind) {
   if (!currentDraft) return;
-  const fileName = kind === 'environment' ? 'environment.json' : 'collection.json';
+  const fileName = kind === 'bundle' ? 'postman_collection_environment.zip' : kind === 'environment' ? 'environment.json' : 'collection.json';
   const res = await authFetch(`/api/postman/drafts/${currentDraft.id}/download/${kind}`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -71,15 +87,14 @@ async function downloadFile(kind) {
 async function analyze(event) {
   event.preventDefault();
   const files = selectedFiles();
-  const collections = files.filter(file => file.name.toLowerCase().endsWith('.json'));
   const caseFiles = files.filter(file => /\.(xlsx|csv)$/i.test(file.name));
-  const unsupported = files.filter(file => !file.name.toLowerCase().endsWith('.json') && !/\.(xlsx|csv)$/i.test(file.name));
-  if (collections.length !== 1 || caseFiles.length > 1 || unsupported.length) {
-    setStatus('Seleccioná una collection JSON y, si hace falta, un único Excel o CSV de casos.');
+  const sources = files.filter(file => !/\.(xlsx|csv)$/i.test(file.name));
+  const unsupported = files.filter(file => !/\.(json|yaml|yml|txt|md|curl|http|docx|pdf|xlsx|csv)$/i.test(file.name));
+  if (!sources.length || caseFiles.length > 1 || unsupported.length) {
+    setStatus('Seleccioná al menos una fuente de endpoints y, si querés, un único Excel o CSV de casos.');
     return;
   }
 
-  const collection = collections[0];
   const projectName = $('projectName').value.trim();
   if (!projectName) {
     setStatus('Escribí el nombre de la collection antes de generarla.');
@@ -96,7 +111,7 @@ async function analyze(event) {
     const fd = new FormData();
     fd.append('project_name', projectName);
     fd.append('manual_text', comments);
-    fd.append('files', collection);
+    sources.forEach(file => fd.append('files', file));
     if (caseFiles[0]) fd.append('test_cases_file', caseFiles[0]);
 
     const res = await authFetch('/api/postman/analyze', { method: 'POST', body: fd });
@@ -104,7 +119,7 @@ async function analyze(event) {
     if (!res.ok) throw new Error(data.detail || 'No se pudo generar la collection.');
     currentDraft = data.draft;
     renderResult();
-    await downloadFile('collection');
+    await downloadFile('bundle');
   } catch (error) {
     setStatus(error.message || 'No se pudo generar la collection.');
   } finally {

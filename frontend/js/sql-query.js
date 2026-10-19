@@ -122,6 +122,12 @@ $('knowledgeForm').addEventListener('submit', async event => {
 });
 
 async function init() {
+  const prefill = sessionStorage.getItem('qaSqlPrefillV1');
+  if (prefill) {
+    sessionStorage.removeItem('qaSqlPrefillV1');
+    $('userMessage').value = prefill.slice(0, 8000);
+    $('userMessage').focus();
+  }
   try {
     await loadCatalogStatus();
     await loadConversation();
