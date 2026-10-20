@@ -1,4 +1,5 @@
 import { authFetch, requireAuth } from './auth.js?v=20261001-2';
+import { showDataQueries } from './data-queries.js?v=20261020-1';
 
 requireAuth(['qa']);
 
@@ -20,6 +21,7 @@ function updateSourceSummary() {
   $('sourceSummary').innerHTML = files.map(file => `<span class="pm-file-chip">${/\.(xlsx|csv)$/i.test(file.name) ? 'Casos: ' : ''}${escapeHtml(file.name)}</span>`).join('') || 'Archivos todavía no seleccionados';
   currentDraft = null;
   $('resultPanel').hidden = true;
+  $('postmanDataQueries').dataset.draftId = '';
 }
 
 function escapeHtml(value = '') {
@@ -35,22 +37,14 @@ function renderResult() {
   const checks = readiness.manual_checks || [];
   $('missingPanel').hidden = !missing.length && !checks.length;
   $('missingSummary').textContent = missing.length ? `${missing.length} dato${missing.length === 1 ? '' : 's'} por completar en el environment antes de ejecutar` : 'Revisiones pendientes antes de ejecutar';
-  const missingLine = item => `<li><strong>${escapeHtml(item.key)}</strong> · ${escapeHtml(item.reason)}${item.context ? ` · ${escapeHtml(item.context)}` : ''}</li>`;
+  const missingLine = item => `<li><strong>${escapeHtml(item.key)}</strong> · ${escapeHtml(item.reason)}${item.context ? ` · ${escapeHtml(item.context)}` : ''}${item.queryable ? '' : ' · Carga manual'}</li>`;
   $('missingList').innerHTML = missing.slice(0, 6).map(missingLine).join('');
   $('moreMissing').hidden = missing.length <= 6;
   $('moreMissingSummary').textContent = `Ver los ${missing.length - 6} datos restantes`;
   $('moreMissingList').innerHTML = missing.slice(6).map(missingLine).join('');
   $('manualDetails').hidden = !checks.length;
   $('manualList').innerHTML = checks.map(item => `<li>${escapeHtml(item)}</li>`).join('');
-  $('getDataQuery').hidden = !readiness.query_request;
-  $('getDataQuery').onclick = () => {
-    sessionStorage.setItem('qaSqlPrefillV1', readiness.query_request);
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: 'qa:navigate', view: 'sql-query' }, window.location.origin);
-    } else {
-      window.location.assign('/app/sql-query.html');
-    }
-  };
+  showDataQueries($('postmanDataQueries'), 'postman', currentDraft.id, missing);
 }
 
 function startNewCollection() {
@@ -104,6 +98,7 @@ async function analyze(event) {
   const comments = $('manualText').value.trim();
   currentDraft = null;
   $('resultPanel').hidden = true;
+  $('postmanDataQueries').dataset.draftId = '';
   $('analyzeBtn').disabled = true;
   setStatus('Generando collection...');
 

@@ -18,6 +18,7 @@ const cancellablePaths = [
   '/api/functional/coach/start', '/api/functional/coach/message', '/api/functional/coach/confirm', '/api/functional/coach/finish',
   '/api/chat-proyectos',
   '/api/sql-assistant/conversation/messages',
+  '/api/sql-assistant/data-queries',
 ];
 let activeCancelableRequest = null;
 let cancelNoticeTimer = null;

@@ -1,4 +1,5 @@
 import { authFetch, requireAuth } from './auth.js?v=20261001-2';
+import { showDataQueries } from './data-queries.js?v=20261020-1';
 
 requireAuth(['qa']);
 
@@ -22,6 +23,7 @@ function updateFiles() {
   $('kFiles').innerHTML = selectedFiles().map(file => `<span class="k-file">${/\.(xlsx|csv)$/i.test(file.name) ? 'Casos: ' : ''}${escapeHtml(file.name)}</span>`).join('') || 'Archivos todavía no seleccionados';
   currentDraft = null;
   $('kResult').hidden = true;
+  $('karateDataQueries').dataset.draftId = '';
 }
 
 function renderResult() {
@@ -31,22 +33,14 @@ function renderResult() {
   $('kResult').hidden = false;
   $('kPending').hidden = !missing.length && !checks.length;
   $('kMissingSummary').textContent = missing.length ? `${missing.length} dato${missing.length === 1 ? '' : 's'} por completar antes de ejecutar` : 'Revisiones pendientes antes de ejecutar';
-  const item = entry => `<li><strong>${escapeHtml(entry.key)}</strong> · ${escapeHtml(entry.reason)}${entry.context ? ` · ${escapeHtml(entry.context)}` : ''}</li>`;
+  const item = entry => `<li><strong>${escapeHtml(entry.key)}</strong> · ${escapeHtml(entry.reason)}${entry.context ? ` · ${escapeHtml(entry.context)}` : ''}${entry.queryable ? '' : ' · Carga manual'}</li>`;
   $('kMissingList').innerHTML = missing.slice(0, 6).map(item).join('');
   $('kMoreMissing').hidden = missing.length <= 6;
   $('kMoreMissingSummary').textContent = `Ver los ${missing.length - 6} datos restantes`;
   $('kMoreMissingList').innerHTML = missing.slice(6).map(item).join('');
   $('kManual').hidden = !checks.length;
   $('kManualList').innerHTML = checks.map(check => `<li>${escapeHtml(check)}</li>`).join('');
-  $('kQuery').hidden = !readiness.query_request;
-  $('kQuery').onclick = () => {
-    sessionStorage.setItem('qaSqlPrefillV1', readiness.query_request);
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: 'qa:navigate', view: 'sql-query' }, window.location.origin);
-    } else {
-      window.location.assign('/app/sql-query.html');
-    }
-  };
+  showDataQueries($('karateDataQueries'), 'karate', currentDraft.id, missing);
 }
 
 async function downloadProject() {
@@ -89,6 +83,7 @@ async function generate(event) {
   }
   currentDraft = null;
   $('kResult').hidden = true;
+  $('karateDataQueries').dataset.draftId = '';
   $('kGenerate').disabled = true;
   status('Generando proyecto Karate...');
   try {

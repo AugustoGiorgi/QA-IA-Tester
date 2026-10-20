@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Postman</title>
   <link rel="stylesheet" href="/app/dashboard.css?v=20261001-2" />
+  <link rel="stylesheet" href="/app/data-queries.css?v=20261020-1" />
   <style>
     :root {
       --pm-bg: #07101f;
@@ -454,7 +455,7 @@
             <strong id="missingSummary"></strong>
             <ul id="missingList"></ul>
             <details id="moreMissing" hidden><summary id="moreMissingSummary"></summary><ul id="moreMissingList"></ul></details>
-            <button id="getDataQuery" class="pm-secondary" type="button" hidden>Conseguir query para datos</button>
+            <div id="postmanDataQueries" class="qa-data-queries" hidden></div>
             <details id="manualDetails" hidden><summary>Otras verificaciones pendientes</summary><ul id="manualList"></ul></details>
           </section>
         </div>
@@ -462,6 +463,6 @@
     </section>
   </main>
 
-  <script type="module" src="/app/js/postman.js?v=20261019-1"></script>
+  <script type="module" src="/app/js/postman.js?v=20261020-1"></script>
 </body>
 </html>

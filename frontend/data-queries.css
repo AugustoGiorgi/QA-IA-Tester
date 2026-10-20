@@ -1,0 +1,10 @@
+.qa-data-queries[hidden] { display: none; }
+.qa-data-queries { display: grid; gap: 9px; min-width: 0; padding-top: 12px; border-top: 1px solid rgba(96,165,250,.24); color: #dbeafe; font-size: .86rem; }
+.qa-data-queries > strong { color: #f8fafc; }
+.qa-data-queries p { margin: 0; color: #a9bdd5; line-height: 1.45; }
+.qa-data-query { min-width: 0; padding: 10px 12px; border: 1px solid #34465e; border-radius: 6px; background: #0b172a; }
+.qa-data-query summary { cursor: pointer; color: #dbeafe; font-weight: 700; overflow-wrap: anywhere; }
+.qa-data-query pre { margin: 10px 0; padding: 10px; overflow-x: auto; border: 1px solid #34465e; border-radius: 6px; background: #07101f; color: #e2e8f0; font-size: .81rem; line-height: 1.5; }
+.qa-data-query p { margin-top: 8px; }
+.qa-query-copy { min-height: 34px; padding: 0 11px; border: 1px solid #4b76aa; border-radius: 6px; background: #13213b; color: #dbeafe; font: inherit; font-weight: 700; cursor: pointer; }
+.qa-query-copy:hover { border-color: #93c5fd; }

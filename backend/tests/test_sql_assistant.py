@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -16,7 +17,10 @@ from services.sql_assistant import (
     _select_schema_context,
     _catalog_rows,
     _prompt_history,
+    _compile_data_query,
+    _draft_data_queries,
     _validate_select,
+    draft_data_queries,
     router,
     MessageIn,
     send_message,
@@ -86,6 +90,24 @@ class SqlAssistantTests(unittest.TestCase):
             with self.subTest(sql=sql), self.assertRaises(ValueError):
                 _validate_select(sql)
 
+    def test_data_query_plan_uses_only_catalog_identifiers_and_binds(self):
+        schema = {"relevant_tables": [{"owner": "INSUDB", "table": "POLICY", "columns": [
+            {"name": "NPOLICY", "type": "NUMBER"}, {"name": "SSTATUS_POL", "type": "VARCHAR2"},
+        ]}]}
+        sql, binds = _compile_data_query({"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY",
+                                          "filters": [{"column": "SSTATUS_POL", "operator": "=", "bind": "estado"}]}, schema)
+        self.assertIn("SELECT DISTINCT t.NPOLICY FROM INSUDB.POLICY t", sql)
+        self.assertIn("t.SSTATUS_POL = :estado", sql)
+        self.assertEqual(binds, ["estado"])
+        for plan in (
+            {"owner": "INSUDB", "table": "NOT_REAL", "column": "NPOLICY"},
+            {"owner": "INSUDB", "table": "POLICY", "column": "FAKE"},
+            {"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "filters": [{"column": "FAKE", "operator": "="}]},
+            {"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "filters": [{"column": "NPOLICY", "operator": "=", "value": "123"}]},
+        ):
+            with self.subTest(plan=plan), self.assertRaises(ValueError):
+                _compile_data_query(plan, schema)
+
     def test_catalog_cannot_be_changed_through_public_upload_route(self):
         routes = {(route.path, tuple(route.methods or [])) for route in router.routes}
         self.assertFalse(any(path.endswith("/schema") and "POST" in methods for path, methods in routes))
@@ -150,6 +172,98 @@ class FakeDatabase:
 
 
 class SqlAssistantAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_data_queries_use_catalog_and_exclude_credentials(self):
+        collections = {
+            SCHEMA_META: FakeCollection(one={"_id": "current", "catalog_version": "v1"}),
+            SCHEMA_COLUMNS: FakeCollection(rows=[{"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "type": "NUMBER"}]),
+            SCHEMA_RELATIONS: FakeCollection(), KNOWLEDGE: FakeCollection(),
+        }
+        completion = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({"queries": [
+            {"id": 0, "status": "ready", "owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "filters": [], "note": "Candidato"},
+        ]})))])
+        missing = [{"key": "policyNumber", "reason": "Parámetro de ruta", "context": "", "queryable": True},
+                   {"key": "password", "reason": "Credencial", "context": "", "queryable": False}]
+        with patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", new=AsyncMock(return_value=completion)) as ai:
+            queries = await _draft_data_queries(FakeDatabase(collections), missing)
+        self.assertEqual(len(queries), 1)
+        self.assertEqual(queries[0]["status"], "ready")
+        self.assertIn("INSUDB.POLICY", queries[0]["sql"])
+        self.assertNotIn("password", str(ai.call_args))
+
+    async def test_direct_data_queries_never_show_ungrounded_sql(self):
+        collections = {
+            SCHEMA_META: FakeCollection(one={"_id": "current", "catalog_version": "v1"}),
+            SCHEMA_COLUMNS: FakeCollection(rows=[{"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "type": "NUMBER"}]),
+            SCHEMA_RELATIONS: FakeCollection(), KNOWLEDGE: FakeCollection(),
+        }
+        completion = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({"queries": [
+            {"id": 0, "status": "ready", "owner": "INSUDB", "table": "INVENTED", "column": "NPOLICY", "filters": []},
+        ]})))])
+        with patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", new=AsyncMock(return_value=completion)):
+            queries = await _draft_data_queries(FakeDatabase(collections), [{"key": "policyNumber", "queryable": True}])
+        self.assertEqual(queries[0]["status"], "unavailable")
+        self.assertFalse(queries[0]["sql"])
+
+    async def test_direct_query_waits_for_missing_business_definition(self):
+        collections = {
+            SCHEMA_META: FakeCollection(one={"_id": "current", "catalog_version": "v1"}),
+            SCHEMA_COLUMNS: FakeCollection(rows=[{"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "type": "NUMBER"}]),
+            SCHEMA_RELATIONS: FakeCollection(), KNOWLEDGE: FakeCollection(),
+        }
+        missing = [{"key": "policyNumber", "reason": "Parámetro de ruta", "context": "Póliza vigente", "queryable": True}]
+        with patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", new=AsyncMock()) as ai:
+            queries = await _draft_data_queries(FakeDatabase(collections), missing)
+        self.assertEqual(queries[0]["status"], "question")
+        self.assertIn("Conocimiento", queries[0]["note"])
+        ai.assert_not_called()
+
+    async def test_unrelated_policy_knowledge_does_not_define_vigencia(self):
+        collections = {
+            SCHEMA_META: FakeCollection(one={"_id": "current", "catalog_version": "v1"}),
+            SCHEMA_COLUMNS: FakeCollection(rows=[{"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "type": "NUMBER"}]),
+            SCHEMA_RELATIONS: FakeCollection(),
+            KNOWLEDGE: FakeCollection(rows=[{"term": "Póliza", "definition": "La póliza tiene un número identificador."}]),
+        }
+        missing = [{"key": "policyNumber", "reason": "Parámetro de ruta", "context": "Póliza vigente", "queryable": True}]
+        with patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", new=AsyncMock()) as ai:
+            queries = await _draft_data_queries(FakeDatabase(collections), missing)
+        self.assertEqual(queries[0]["status"], "question")
+        ai.assert_not_called()
+
+    async def test_model_failure_does_not_fail_the_data_check(self):
+        collections = {
+            SCHEMA_META: FakeCollection(one={"_id": "current", "catalog_version": "v1"}),
+            SCHEMA_COLUMNS: FakeCollection(rows=[{"owner": "INSUDB", "table": "POLICY", "column": "NPOLICY", "type": "NUMBER"}]),
+            SCHEMA_RELATIONS: FakeCollection(), KNOWLEDGE: FakeCollection(),
+        }
+        with patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", new=AsyncMock(side_effect=RuntimeError("quota"))):
+            with patch("services.sql_assistant.logger.exception"):
+                queries = await _draft_data_queries(FakeDatabase(collections), [{"key": "policyNumber", "queryable": True}])
+        self.assertEqual(queries[0]["status"], "unavailable")
+        self.assertFalse(queries[0]["sql"])
+
+    async def test_direct_data_query_checks_draft_ownership(self):
+        from bson import ObjectId
+        draft_id = str(ObjectId())
+        db = FakeDatabase({"PostmanGenerationDrafts": FakeCollection(one={"_id": ObjectId(draft_id), "created_by": "otra", "model": {"readiness": {"missing_data": []}}})})
+        with patch("services.sql_assistant._db", return_value=db), patch("services.sql_assistant._draft_data_queries", new=AsyncMock()) as build:
+            with self.assertRaises(HTTPException) as raised:
+                await draft_data_queries("postman", draft_id, {"role": "qa", "username": "actual", "shared": False})
+        self.assertEqual(raised.exception.status_code, 403)
+        build.assert_not_called()
+
+    async def test_karate_query_route_uses_its_saved_missing_data(self):
+        from bson import ObjectId
+        draft_id = str(ObjectId())
+        missing = [{"key": "policyNumber", "queryable": True}]
+        db = FakeDatabase({"KarateGenerationDrafts": FakeCollection(one={
+            "_id": ObjectId(draft_id), "created_by": "shared", "model": {"readiness": {"missing_data": missing}},
+        })})
+        with patch("services.sql_assistant._db", return_value=db), patch("services.sql_assistant._draft_data_queries", new=AsyncMock(return_value=[{"key": "policyNumber", "status": "question"}])) as build:
+            response = await draft_data_queries("karate", draft_id, {"role": "qa", "username": "shared", "shared": True})
+        self.assertEqual(response["queries"][0]["key"], "policyNumber")
+        build.assert_awaited_once_with(db, missing)
+
     async def test_catalog_rows_are_reused_until_version_changes(self):
         columns = FakeCollection(rows=[{"column": "NPOLICY"}])
         relations = FakeCollection(rows=[{"column": "NCLIENT"}])

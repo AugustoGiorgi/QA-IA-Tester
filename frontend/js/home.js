@@ -17,8 +17,8 @@ const tools = [
   { id: 'entendimiento', roles: ['qa', 'lider'], label: 'Entendimiento', href: '/app/entendimiento.html' },
   { id: 'casos', roles: ['qa'], label: 'Casos de Prueba', href: '/app/casos.html' },
   { id: 'playwright', roles: ['qa'], label: 'Playwright', href: '/app/playwright_xlsx.html?v=20261005-1' },
-  { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20261019-1' },
-    { id: 'karate', roles: ['qa'], label: 'Karate', href: '/app/karate.html?v=20261019-3' },
+  { id: 'postman', roles: ['qa'], label: 'Postman', href: '/app/postman.html?v=20261020-1' },
+    { id: 'karate', roles: ['qa'], label: 'Karate', href: '/app/karate.html?v=20261020-1' },
   { id: 'evidencias', roles: ['qa'], label: 'Evidencias QA', href: '/app/evidencias.html?v=20261020-1' },
   { id: 'sql-query', roles: ['qa'], label: 'Consultas SQL', href: '/app/sql-query.html?v=20261019-1' },
 ];
