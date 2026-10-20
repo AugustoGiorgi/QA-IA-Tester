@@ -6,6 +6,8 @@ import json
 import os
 import re
 import unicodedata
+import warnings
+from collections import Counter, defaultdict, deque
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -29,6 +31,8 @@ SESSIONS = "QAEvidenceSessions"
 IMAGES = "QAEvidenceImages"
 ARCHIVED_CASES = "QAEvidenceArchivedCases"
 MAX_SPREADSHEET_BYTES = 20 * 1024 * 1024
+MAX_SPREADSHEET_ROWS = 20_000
+MAX_SPREADSHEET_CELLS = 500_000
 MAX_SESSION_DOCUMENT_BYTES = 14 * 1024 * 1024
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 MAX_REPORT_IMAGE_BYTES = 120 * 1024 * 1024
@@ -36,9 +40,9 @@ ALLOWED_IMAGE_FORMATS = {"PNG", "JPEG", "WEBP"}
 AR_TZ = timezone(timedelta(hours=-3))
 
 FIELD_ALIASES = {
-    "case_id": {"id", "id caso", "caso", "identificador", "codigo caso", "codigo", "nro", "nro caso", "numero caso", "caso id", "case id", "case number", "test id", "id prueba"},
-    "name": {"nombre", "nombre caso", "nombre del caso", "escenario", "titulo", "titulo del caso", "caso de prueba", "test case", "scenario", "descripcion del caso"},
-    "status": {"estado", "estado de ejecucion", "resultado", "resultado de ejecucion", "status", "execution status", "test result"},
+    "case_id": {"id", "id caso", "id caso de prueba", "id caso prueba", "caso", "identificador", "codigo caso", "codigo", "nro", "nro caso", "numero caso", "caso id", "case id", "case number", "test id", "id prueba"},
+    "name": {"nombre", "nombre caso", "nombre del caso", "escenario", "titulo", "titulo del caso", "caso de prueba", "objetivo de la prueba", "objetivo", "test case", "scenario", "descripcion del caso"},
+    "status": {"estado", "estado de ejecucion", "resultado", "resultado de ejecucion", "validacion del resultado", "validacion resultado", "status", "execution status", "test result"},
     "expected_result": {"resultado esperado", "esperado", "expected", "expected result", "expected outcome"},
     "actual_result": {"resultado obtenido", "resultado real", "resultado actual", "actual", "actual result", "actual outcome", "resultado de prueba"},
     "observations": {"observacion", "observaciones", "comentario", "comentarios", "detalle", "detalle del error", "causa de error", "error", "descripcion del error", "observations", "notes"},
@@ -95,6 +99,8 @@ def _parse_rows(rows_by_sheet: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     id_occurrences: Dict[str, int] = {}
     matched_headers = 0
     for sheet_index, sheet in enumerate(rows_by_sheet):
+        if _normalize(sheet["name"]) in {"bugs", "bug", "defectos", "resumen", "dashboard"}:
+            continue
         rows = [list(row) for row in sheet["rows"]]
         nonempty = [(index, row) for index, row in enumerate(rows) if any(_text(cell) for cell in row)]
         if len(nonempty) < 2:
@@ -145,6 +151,84 @@ def _parse_rows(rows_by_sheet: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return cases
 
 
+def _case_identity(case: Dict[str, Any]) -> tuple[str, str, str]:
+    case_id = _text(case.get("case_id"))
+    name = _text(case.get("name"))
+    if case_id == f"Fila {case.get('source_row')}":
+        case_id = ""
+        for header, value in (case.get("source_fields") or {}).items():
+            normalized = _normalize(header)
+            if normalized in FIELD_ALIASES["case_id"] and _text(value):
+                case_id = _text(value)
+            if name == _text(case.get("case_id")) and normalized in FIELD_ALIASES["name"] and _text(value):
+                name = _text(value)
+    return (_normalize(case.get("source_sheet")), _normalize(case_id), _normalize(name))
+
+
+def _reconcile_case_keys(
+    parsed: List[Dict[str, Any]],
+    active: List[Dict[str, Any]],
+    archived: List[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], List[str]]:
+    candidates = [(case, False) for case in active] + [(case, True) for case in archived]
+    by_identity = defaultdict(deque)
+    by_id = defaultdict(list)
+    by_key = {}
+    for case, is_archived in candidates:
+        identity = _case_identity(case)
+        candidate = (case, is_archived)
+        by_identity[identity].append(candidate)
+        by_id[identity[:2]].append(candidate)
+        by_key.setdefault(case["case_key"], candidate)
+    used: set[str] = set()
+    reserved = {case["case_key"] for case, _ in candidates}
+    matches_by_row = [None] * len(parsed)
+    identities = [_case_identity(case) for case in parsed]
+    for index, identity in enumerate(identities):
+        matches = by_identity[identity]
+        while matches and matches[0][0]["case_key"] in used:
+            matches.popleft()
+        if matches:
+            matches_by_row[index] = matches.popleft()
+            used.add(matches_by_row[index][0]["case_key"])
+    unmatched_ids = Counter(identity[:2] for identity, match in zip(identities, matches_by_row)
+                            if match is None and identity[1])
+    for index, incoming in enumerate(parsed):
+        if matches_by_row[index] is not None:
+            continue
+        sheet, case_id, name = identities[index]
+        match = None
+        if case_id:
+            same_id = [candidate for candidate in by_id[(sheet, case_id)] if candidate[0]["case_key"] not in used]
+            if len(same_id) == 1 and unmatched_ids[(sheet, case_id)] == 1:
+                match = same_id[0]
+        elif name == _normalize(incoming.get("case_id")):
+            candidate = by_key.get(incoming["case_key"])
+            match = candidate if candidate and candidate[0]["case_key"] not in used else None
+        if match is not None:
+            matches_by_row[index] = match
+            used.add(match[0]["case_key"])
+    restored: List[str] = []
+    reconciled: List[Dict[str, Any]] = []
+    for incoming, match, identity in zip(parsed, matches_by_row, identities):
+        sheet, case_id, name = identity
+        item = dict(incoming)
+        if match is not None:
+            prior, is_archived = match
+            item["case_key"] = prior["case_key"]
+            if is_archived:
+                restored.append(item["case_key"])
+        elif item["case_key"] in reserved or item["case_key"] in used:
+            seed = f"{sheet}:{case_id}:{name}:{incoming.get('source_row')}"
+            suffix = 0
+            while item["case_key"] in reserved or item["case_key"] in used:
+                item["case_key"] = hashlib.sha256(f"{seed}:{suffix}".encode("utf-8")).hexdigest()[:24]
+                suffix += 1
+        used.add(item["case_key"])
+        reconciled.append(item)
+    return reconciled, restored
+
+
 def parse_spreadsheet(contents: bytes, filename: str) -> List[Dict[str, Any]]:
     suffix = os.path.splitext(filename.lower())[1]
     if suffix == ".xlsx":
@@ -153,9 +237,21 @@ def parse_spreadsheet(contents: bytes, filename: str) -> List[Dict[str, Any]]:
         try:
             workbook = load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
             materialized = []
-            for worksheet in workbook.worksheets:
-                rows = [[_numeric_text(cell.value, cell.number_format) for cell in row] for row in worksheet.iter_rows()]
-                materialized.append({"name": worksheet.title, "rows": rows})
+            row_count = cell_count = 0
+            try:
+                for worksheet in workbook.worksheets:
+                    rows = []
+                    for row in worksheet.iter_rows():
+                        row_count += 1
+                        cell_count += len(row)
+                        if row_count > MAX_SPREADSHEET_ROWS or cell_count > MAX_SPREADSHEET_CELLS:
+                            raise HTTPException(status_code=413, detail="La planilla es demasiado grande. Separala en archivos más chicos.")
+                        rows.append([_numeric_text(cell.value, cell.number_format) for cell in row])
+                    materialized.append({"name": worksheet.title, "rows": rows})
+            finally:
+                workbook.close()
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(status_code=400, detail="No se pudo leer el Excel. Verificá que no esté dañado ni protegido.") from exc
         return _parse_rows(materialized)
@@ -164,7 +260,12 @@ def parse_spreadsheet(contents: bytes, filename: str) -> List[Dict[str, Any]]:
             import xlrd
             workbook = xlrd.open_workbook(file_contents=contents, on_demand=True, formatting_info=True)
             sheets = []
+            row_count = cell_count = 0
             for worksheet in workbook.sheets():
+                row_count += worksheet.nrows
+                cell_count += worksheet.nrows * worksheet.ncols
+                if row_count > MAX_SPREADSHEET_ROWS or cell_count > MAX_SPREADSHEET_CELLS:
+                    raise HTTPException(status_code=413, detail="La planilla es demasiado grande. Separala en archivos más chicos.")
                 rows = []
                 for row_index in range(worksheet.nrows):
                     values = []
@@ -181,7 +282,10 @@ def parse_spreadsheet(contents: bytes, filename: str) -> List[Dict[str, Any]]:
                                 number_format = workbook.format_map[xf.format_key].format_str
                             except Exception:
                                 number_format = ""
-                            value = _numeric_text(cell.value, number_format)
+                            numeric = cell.value
+                            if cell.ctype == xlrd.XL_CELL_NUMBER and isinstance(numeric, (int, float)) and float(numeric).is_integer():
+                                numeric = int(numeric)
+                            value = _numeric_text(numeric, number_format)
                         values.append(value)
                     rows.append(values)
                 sheets.append({"name": worksheet.name, "rows": rows})
@@ -294,17 +398,19 @@ def _validated_image(contents: bytes, filename: str) -> tuple[str, str]:
     if len(contents) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="Cada imagen puede pesar hasta 12 MB.")
     try:
-        image = Image.open(io.BytesIO(contents))
-        image_format = (image.format or "").upper()
-        if image_format not in ALLOWED_IMAGE_FORMATS:
-            raise HTTPException(status_code=415, detail="Usá imágenes PNG, JPG, JPEG o WEBP.")
-        image.verify()
-        if image.width * image.height > 80_000_000:
-            raise HTTPException(status_code=413, detail="La resolución de la imagen es demasiado grande.")
-        return image_format, Image.MIME.get(image_format, "application/octet-stream")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(contents)) as image:
+                image_format = (image.format or "").upper()
+                if image_format not in ALLOWED_IMAGE_FORMATS:
+                    raise HTTPException(status_code=415, detail="Usá imágenes PNG, JPG, JPEG o WEBP.")
+                if image.width * image.height > 80_000_000:
+                    raise HTTPException(status_code=413, detail="La resolución de la imagen es demasiado grande.")
+                image.verify()
+            return image_format, Image.MIME.get(image_format, "application/octet-stream")
     except HTTPException:
         raise
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
         raise HTTPException(status_code=400, detail="El archivo no parece ser una imagen válida.") from exc
 
 
@@ -478,11 +584,11 @@ def build_evidence_docx(session: Dict[str, Any], images: Dict[str, bytes]) -> by
     doc.add_paragraph()
     heading = doc.add_paragraph("Resumen de ejecución", style="Heading 1")
     heading.paragraph_format.space_before = Pt(8)
-    summary = doc.add_table(rows=1, cols=5)
+    summary = doc.add_table(rows=1, cols=6)
     summary.autofit = False
-    headers = ["Casos", "OK", "Error", "Bloqueados", "Con evidencia"]
-    widths = [1.0, 0.95, 0.95, 1.2, 1.45]
-    values = [str(len(cases)), str(groups["ok"]), str(groups["error"]), str(groups["blocked"]), f"{with_evidence} / {len(cases)}"]
+    headers = ["Casos", "OK", "Error", "Bloqueados", "Pend./otros", "Con evidencia"]
+    widths = [0.8, 0.75, 0.75, 1.15, 1.25, 1.45]
+    values = [str(len(cases)), str(groups["ok"]), str(groups["error"]), str(groups["blocked"]), str(len(cases) - groups["ok"] - groups["error"] - groups["blocked"]), f"{with_evidence} / {len(cases)}"]
     for index, label in enumerate(headers):
         cell = summary.rows[0].cells[index]
         cell.width = Inches(widths[index])
@@ -581,7 +687,7 @@ def build_evidence_docx(session: Dict[str, Any], images: Dict[str, bytes]) -> by
         for image_index, image_meta in enumerate(case_images):
             image_bytes = images.get(image_meta.get("id", ""))
             if not image_bytes:
-                continue
+                raise ValueError(f"Falta la imagen de evidencia {image_meta.get('id') or image_index + 1}.")
             title_text = image_meta.get("title") or f"Evidencia {image_index + 1}"
             caption_text = image_meta.get("caption") or "Sin descripción adicional."
             caption = doc.add_paragraph()
@@ -594,11 +700,11 @@ def build_evidence_docx(session: Dict[str, Any], images: Dict[str, bytes]) -> by
             with Image.open(io.BytesIO(image_bytes)) as source_image:
                 width_px, height_px = source_image.size
             max_width, max_height = 6.3, 5.8
-            scale = min(max_width / width_px, max_height / height_px)
+            scale = min(max_width * 96 / width_px, max_height * 96 / height_px, 1)
             picture = doc.add_paragraph()
             picture.alignment = WD_ALIGN_PARAGRAPH.CENTER
             picture.paragraph_format.keep_with_next = True
-            picture.add_run().add_picture(image_stream, width=Inches(width_px * scale), height=Inches(height_px * scale))
+            picture.add_run().add_picture(image_stream, width=Inches(width_px * scale / 96), height=Inches(height_px * scale / 96))
             description = doc.add_paragraph(caption_text)
             description.alignment = WD_ALIGN_PARAGRAPH.CENTER
             description.paragraph_format.space_after = Pt(10)
@@ -681,17 +787,11 @@ async def update_spreadsheet(session_id: str, file: UploadFile = File(...), user
     parsed = parse_spreadsheet(contents, filename)
     previous = {case.get("case_key"): case for case in doc.get("cases") or []}
     archived = _db()[ARCHIVED_CASES]
-    next_cases = []
-    restored = 0
-    restored_keys = []
-    for case in parsed:
-        prior = previous.get(case["case_key"])
-        if not prior:
-            prior = await archived.find_one({"session_id": doc["_id"], "case_key": case["case_key"]})
-            if prior:
-                restored += 1
-                restored_keys.append(case["case_key"])
-        next_cases.append(case)
+    archived_docs = await archived.find({"session_id": doc["_id"]}, {"case": 1}).to_list(length=None)
+    next_cases, restored_keys = _reconcile_case_keys(
+        parsed, list(previous.values()), [item["case"] for item in archived_docs]
+    )
+    restored = len(restored_keys)
     next_keys = {case["case_key"] for case in next_cases}
     removed = [case for key, case in previous.items() if key not in next_keys]
     image_delta = 0
@@ -862,6 +962,8 @@ async def download_evidence_report(session_id: str, user: Dict[str, Any] = Depen
             if total_bytes > MAX_REPORT_IMAGE_BYTES:
                 raise HTTPException(status_code=413, detail="Las imágenes superan el máximo procesable por informe (120 MB). Podés generar el documento en ejecuciones más pequeñas.")
             images[str(image["_id"])] = raw
+        if len(images) != len(set(item.get("id") for item in image_refs)):
+            raise HTTPException(status_code=409, detail="Falta una imagen de evidencia guardada. Actualizá la página e intentá de nuevo.")
     output = await run_in_threadpool(build_evidence_docx, doc, images)
     project_slug = safe_stem(doc.get("project_name"), "proyecto").replace(" ", "_")[:80]
     stamp = datetime.now(AR_TZ).strftime("%Y-%m-%d")

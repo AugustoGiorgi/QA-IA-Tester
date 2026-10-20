@@ -3,8 +3,28 @@ import { authFetch, requireAuth } from './auth.js?v=20261007-1';
 requireAuth(['qa']);
 
 const $ = id => document.getElementById(id);
-const state = { session: null, sessions: [], filter: 'all', query: '' };
+const state = { session: null, sessions: [], filter: 'all', query: '', openCases: new Set(), saveErrors: new Set() };
 const imageCategories = ['Antes', 'Acción', 'Final', 'Error', 'Request/response', 'General'];
+let pendingMutations = Promise.resolve();
+let mutationCount = 0;
+
+function queueMutation(task) {
+  mutationCount += 1;
+  $('savedSessions').disabled = true;
+  $('newSession').disabled = true;
+  const operation = pendingMutations.then(task);
+  pendingMutations = operation.catch(() => {});
+  operation.then(() => finishMutation(), () => finishMutation());
+  return operation;
+}
+
+function finishMutation() {
+  mutationCount -= 1;
+  if (mutationCount === 0) {
+    $('savedSessions').disabled = false;
+    $('newSession').disabled = false;
+  }
+}
 
 function escapeHtml(value = '') {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -50,9 +70,10 @@ async function loadSessions(selectId = '') {
   select.value = selectId || '';
 }
 
-async function openSession(id) {
-  const { session } = await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(id)}`);
+function showSession(session, resetOpen = true) {
   state.session = session;
+  if (resetOpen) state.openCases.clear();
+  state.saveErrors.clear();
   localStorage.setItem('qa_evidence_session_id', session.id);
   $('startView').hidden = true;
   $('sessionView').hidden = false;
@@ -63,8 +84,15 @@ async function openSession(id) {
   renderCases();
 }
 
+async function openSession(id) {
+  await pendingMutations;
+  const { session } = await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(id)}`);
+  showSession(session);
+}
+
 function showNewSession() {
   state.session = null;
+  state.openCases.clear();
   localStorage.removeItem('qa_evidence_session_id');
   $('savedSessions').value = '';
   $('sessionView').hidden = true;
@@ -83,6 +111,7 @@ function renderMetrics() {
     ['OK', count('ok'), 'ok'],
     ['Error', count('error'), 'error'],
     ['Bloqueados', count('blocked'), 'blocked'],
+    ['Pendientes / otros', cases.length - count('ok') - count('error') - count('blocked'), ''],
     ['Con evidencia', `${withImages} / ${cases.length}`, ''],
   ];
   $('metrics').innerHTML = metrics.map(([label, value, group]) => `<div class="ev-metric" data-state="${group}"><span>${label}</span><strong>${value}</strong></div>`).join('');
@@ -121,6 +150,7 @@ function renderImage(image, index, caseKey) {
           <button class="ev-button secondary" type="button" data-suggest>✨ Sugerir con IA</button>
           <button class="ev-icon-button danger" type="button" data-image-delete aria-label="Eliminar evidencia" title="Eliminar">×</button>
         </div>
+        <span class="ev-save-status" data-save-status role="status"></span>
         <p class="ev-ai-disclaimer">La sugerencia se envía a OpenAI y solo propone título, tipo y descripción. No evalúa ni modifica el resultado.</p>
         <div class="ev-ai-suggestion" data-ai-suggestion hidden></div>
       </div>
@@ -141,7 +171,7 @@ function renderCase(item) {
         ? 'La evidencia es opcional para los casos bloqueados.'
         : 'Agregá evidencia cuando ayude a entender la ejecución.';
   return `
-    <details class="ev-case" data-case-key="${escapeHtml(item.case_key)}">
+    <details class="ev-case" data-case-key="${escapeHtml(item.case_key)}" ${state.openCases.has(item.case_key) ? 'open' : ''}>
       <summary>
         <span class="ev-case-id">${escapeHtml(item.case_id || 'Caso')}</span>
         <span class="ev-case-title">${escapeHtml(item.name || 'No informado')}</span>
@@ -176,6 +206,7 @@ function refreshSessionView() {
 }
 
 async function uploadImages(caseKey, files) {
+  const sessionId = state.session.id;
   const valid = [...files].filter(file => {
     const okType = /\.(png|jpe?g|webp)$/i.test(file.name) || ['image/png', 'image/jpeg', 'image/webp'].includes(file.type);
     if (!okType) window.alert(`${file.name}: formato no admitido.`);
@@ -183,14 +214,18 @@ async function uploadImages(caseKey, files) {
     return okType && file.size <= 12 * 1024 * 1024;
   });
   try {
-    for (const file of valid) {
-      const form = new FormData();
-      form.append('file', file);
-      const result = await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(state.session.id)}/cases/${encodeURIComponent(caseKey)}/images`, { method: 'POST', body: form });
-      const item = findCase(caseKey);
-      item.images ||= [];
-      item.images.push(result.image);
-    }
+    await queueMutation(async () => {
+      for (const file of valid) {
+        const form = new FormData();
+        form.append('file', file);
+        const result = await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(sessionId)}/cases/${encodeURIComponent(caseKey)}/images`, { method: 'POST', body: form });
+        const item = findCase(caseKey);
+        if (item) {
+          item.images ||= [];
+          item.images.push(result.image);
+        }
+      }
+    });
   } finally {
     refreshSessionView();
   }
@@ -204,14 +239,47 @@ async function saveImage(imageRow) {
     caption: imageRow.querySelector('[data-image-caption]').value,
     category: imageRow.querySelector('[data-image-category]').value,
   };
-  const result = await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(state.session.id)}/cases/${encodeURIComponent(caseKey)}/images/${encodeURIComponent(imageId)}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-  });
-  const image = findCase(caseKey).images.find(item => item.id === imageId);
-  Object.assign(image, result.image);
+  const sessionId = state.session.id;
+  const saveStatus = imageRow.querySelector('[data-save-status]');
+  saveStatus.textContent = 'Guardando…';
+  try {
+    await queueMutation(async () => {
+      const result = await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(sessionId)}/cases/${encodeURIComponent(caseKey)}/images/${encodeURIComponent(imageId)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const image = findCase(caseKey)?.images?.find(item => item.id === imageId);
+      if (image) Object.assign(image, result.image);
+    });
+    if (state.session?.id === sessionId) state.saveErrors.delete(imageId);
+    saveStatus.textContent = 'Guardado';
+  } catch (error) {
+    if (state.session?.id === sessionId) state.saveErrors.add(imageId);
+    saveStatus.textContent = 'No se guardó';
+    throw error;
+  }
+}
+
+async function saveVisibleEdits() {
+  for (const row of $('caseList').querySelectorAll('.ev-image-row')) {
+    const image = findCase(row.dataset.caseKey)?.images?.find(item => item.id === row.dataset.imageId);
+    if (!image) continue;
+    if (row.querySelector('[data-image-title]').value !== (image.title || '') ||
+        row.querySelector('[data-image-caption]').value !== (image.caption || '') ||
+        row.querySelector('[data-image-category]').value !== (image.category || 'General')) {
+      await saveImage(row);
+    }
+  }
+  await pendingMutations;
+  if (state.saveErrors.size) throw new Error('Hay cambios de evidencia que no se guardaron. Revisalos antes de continuar.');
 }
 
 function bindCaseControls() {
+  $('caseList').querySelectorAll('.ev-case').forEach(details => {
+    details.querySelector('summary').addEventListener('click', () => {
+      if (details.open) state.openCases.delete(details.dataset.caseKey);
+      else state.openCases.add(details.dataset.caseKey);
+    });
+  });
   $('caseList').querySelectorAll('[data-add-images]').forEach(input => input.addEventListener('change', async () => {
     const caseKey = input.closest('[data-case-key]').dataset.caseKey;
     try { await uploadImages(caseKey, input.files); } catch (error) { window.alert(error.message); }
@@ -235,9 +303,11 @@ function bindCaseControls() {
     row.querySelector('[data-image-delete]').addEventListener('click', async () => {
       if (!window.confirm('¿Eliminar esta evidencia?')) return;
       try {
-        await request(`/api/evidence/sessions/${encodeURIComponent(state.session.id)}/cases/${encodeURIComponent(row.dataset.caseKey)}/images/${encodeURIComponent(row.dataset.imageId)}`, { method: 'DELETE' });
+        const sessionId = state.session.id;
+        await queueMutation(() => request(`/api/evidence/sessions/${encodeURIComponent(sessionId)}/cases/${encodeURIComponent(row.dataset.caseKey)}/images/${encodeURIComponent(row.dataset.imageId)}`, { method: 'DELETE' }));
         const item = findCase(row.dataset.caseKey);
         item.images = item.images.filter(image => image.id !== row.dataset.imageId);
+        state.saveErrors.delete(row.dataset.imageId);
         refreshSessionView();
       } catch (error) { window.alert(error.message); }
     });
@@ -255,10 +325,12 @@ async function moveImage(row, direction) {
   const target = index + direction;
   if (target < 0 || target >= images.length) return;
   [images[index], images[target]] = [images[target], images[index]];
+  const imageIds = images.map(image => image.id);
+  const sessionId = state.session.id;
   try {
-    await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(state.session.id)}/cases/${encodeURIComponent(caseItem.case_key)}/images/order`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_ids: images.map(image => image.id) }),
-    });
+    await queueMutation(() => jsonRequest(`/api/evidence/sessions/${encodeURIComponent(sessionId)}/cases/${encodeURIComponent(caseItem.case_key)}/images/order`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_ids: imageIds }),
+    }));
     renderCases();
   } catch (error) {
     [images[index], images[target]] = [images[target], images[index]];
@@ -271,7 +343,8 @@ async function suggestImage(row) {
   button.disabled = true;
   button.textContent = 'Analizando…';
   try {
-    const result = await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(state.session.id)}/images/${encodeURIComponent(row.dataset.imageId)}/suggest`, { method: 'POST' });
+    await pendingMutations;
+    const result = await queueMutation(() => jsonRequest(`/api/evidence/sessions/${encodeURIComponent(state.session.id)}/images/${encodeURIComponent(row.dataset.imageId)}/suggest`, { method: 'POST' }));
     const suggestion = result.suggestion || {};
     const panel = row.querySelector('[data-ai-suggestion]');
     panel.innerHTML = `<span><strong>${escapeHtml(suggestion.title || 'Sugerencia')}</strong> · ${escapeHtml(suggestion.category || 'General')}<br />${escapeHtml(suggestion.caption || '')}</span><button class="ev-button secondary" type="button" data-accept-suggestion>Usar sugerencia</button>`;
@@ -317,7 +390,7 @@ async function createSession(event) {
   $('loadWorkbook').disabled = true;
   setStartStatus('Leyendo la planilla…');
   try {
-    const result = await jsonRequest('/api/evidence/sessions', { method: 'POST', body: form });
+    const result = await queueMutation(() => jsonRequest('/api/evidence/sessions', { method: 'POST', body: form }));
     state.session = result.session;
     await loadSessions(state.session.id);
     await openSession(state.session.id);
@@ -330,18 +403,17 @@ async function createSession(event) {
 
 async function replaceSpreadsheet(file) {
   if (!file || !state.session) return;
+  const sessionId = state.session.id;
   const form = new FormData();
   form.append('file', file);
   $('replaceExcel').disabled = true;
   $('changeNotice').hidden = true;
   try {
-    const result = await jsonRequest(`/api/evidence/sessions/${encodeURIComponent(state.session.id)}/spreadsheet`, { method: 'POST', body: form });
-    state.session = result.session;
+    await saveVisibleEdits();
+    const result = await queueMutation(() => jsonRequest(`/api/evidence/sessions/${encodeURIComponent(sessionId)}/spreadsheet`, { method: 'POST', body: form }));
+    showSession(result.session, false);
     const changes = result.changes;
-    $('changeNotice').textContent = `Planilla actualizada. ${changes.added} casos nuevos, ${changes.removed} retirados${changes.restored ? ` y ${changes.restored} recuperados` : ''}. Las evidencias de los casos coincidentes se conservaron.`;
-    $('changeNotice').hidden = false;
     await loadSessions(state.session.id);
-    await openSession(state.session.id);
     $('changeNotice').textContent = `Planilla actualizada. ${changes.added} casos nuevos, ${changes.removed} retirados${changes.restored ? ` y ${changes.restored} recuperados` : ''}. Las evidencias de los casos coincidentes se conservaron.`;
     $('changeNotice').hidden = false;
   } catch (error) {
@@ -353,13 +425,16 @@ async function replaceSpreadsheet(file) {
 }
 
 async function generateReport() {
+  try { await saveVisibleEdits(); } catch (error) { window.alert(error.message); return; }
+  const sessionId = state.session?.id;
+  if (!sessionId) return;
   const cases = state.session?.cases || [];
   const withoutEvidence = cases.filter(item => !item.images?.length).length;
   if (withoutEvidence && !window.confirm(`${withoutEvidence} casos no tienen evidencia. El informe los marcará como “Sin evidencia gráfica adjunta”. ¿Generar igual?`)) return;
   $('generateReport').disabled = true;
   $('generateReport').textContent = 'Preparando Word…';
   try {
-    const response = await request(`/api/evidence/sessions/${encodeURIComponent(state.session.id)}/report`, { method: 'POST' });
+    const response = await queueMutation(() => request(`/api/evidence/sessions/${encodeURIComponent(sessionId)}/report`, { method: 'POST' }));
     const blob = await response.blob();
     const disposition = response.headers.get('Content-Disposition') || '';
     const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'Evidencias_QA.docx';
