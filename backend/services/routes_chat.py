@@ -10,6 +10,7 @@ import re
 from services.parsing import docx_to_text
 from services.ai import AIResponseError, complete
 from services.files import MAX_UPLOAD_BYTES
+from services.skills import load_skill
 
 router = APIRouter()
 
@@ -83,13 +84,7 @@ async def chat_ask(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     system = {
         "role": "system",
-        "content": (
-            "Sos un analista funcional/QA extremadamente riguroso. "
-            "Respondé únicamente usando la información del Documento Funcional y de la Explicación base. "
-            "Si la pregunta no tiene respuesta en esos textos, decí: "
-            "\"No hay información suficiente en el documento para responder con certeza.\" "
-            "Sé concreto."
-        ),
+        "content": load_skill("chat-documental"),
     }
     user = {
         "role": "user",

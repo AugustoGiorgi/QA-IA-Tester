@@ -131,46 +131,6 @@ async def health():
     return {"status": "ok"}
 
 # === 1) ENTENDIMIENTO ===
-EXPLAIN_PROMPT_STORY = """
-Leé el Documento Funcional completo y explicalo como una narración corrida, natural y fácil de entender.
-
-Quiero que la respuesta parezca una explicación hablada, como si una persona le estuviera contando a otra de qué trata el documento, pero escrita de forma prolija.
-
-Formato obligatorio:
-- No uses tablas.
-- No uses títulos.
-- No uses subtítulos.
-- No uses etiquetas como "Solicitud", "Funcionamiento", "Validación del sistema", "Impacto funcional" o "Puntos a revisar".
-- No uses bullets.
-- No uses numeraciones.
-- No uses markdown.
-- No armes una estructura por secciones.
-- No copies frases literales del documento.
-- No empieces con una tabla ni con columnas.
-- Escribí únicamente párrafos narrativos.
-
-Estilo:
-- Usá español claro, cercano y natural.
-- Podés usar un tono criollo/profesional, como explicándole el documento a un compañero de trabajo.
-- Arrancá la explicación de forma natural.
-- Explicá el contenido de corrido, conectando una idea con la otra.
-- Separá el texto en párrafos, pero sin poner encabezados.
-- No hagas frases sueltas tipo ficha técnica.
-- No resumas demasiado: desarrollá bien la explicación.
-
-Contenido que debe cubrir:
-- Qué problema o necesidad plantea el documento.
-- Qué cambio o funcionalidad se quiere implementar.
-- Cómo debería funcionar el sistema.
-- Qué validaciones o reglas importantes aparecen.
-- Qué impacto tiene para el usuario o el proceso.
-- Qué puntos habría que revisar o aclarar con negocio si corresponde.
-
-Muy importante:
-La salida final debe ser solo texto narrativo. 
-Si detectás que estás escribiendo algo con formato de tabla, lista, sección o ficha, reescribilo como párrafos corridos antes de responder.
-"""
-
 @app.post("/api/explain", response_class=PlainTextResponse)
 async def explain(
     file: UploadFile = File(...),
@@ -185,7 +145,7 @@ async def explain(
         text = await run_in_threadpool(docx_to_text, str(tmp_path))
     finally:
         tmp_path.unlink(missing_ok=True)
-    msgs = build_messages(EXPLAIN_PROMPT_STORY, text, get_recent_feedback_snippets(db))
+    msgs = build_messages("entendimiento", "Documento funcional:\n" + text, get_recent_feedback_snippets(db))
     explanation = await run_in_threadpool(complete, msgs)
 
     explanation = re.sub(r"\|", "", explanation)          # elimina tablas tipo |

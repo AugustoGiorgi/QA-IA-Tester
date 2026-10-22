@@ -10,6 +10,7 @@ import os
 from fastapi import HTTPException
 
 from services.ai import complete
+from services.skills import load_skill
 
 load_dotenv()
 
@@ -199,11 +200,10 @@ def render_answer(message: str, data: Dict[str, Any]) -> str:
         return "No encontré resultados para esa consulta"
 
     return complete([
+        {"role": "system", "content": load_skill("chat-proyectos")},
         {
             "role": "user",
             "content": f"""
-Respondé claro y ordenado.
-
 Datos:
 {json.dumps(data)}
 

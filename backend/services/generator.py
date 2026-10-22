@@ -8,37 +8,6 @@ from docx.enum.text import WD_BREAK
 
 from services.ai import build_messages, complete
 
-GEN_PROMPT = (
-    "Actuá como analista funcional senior. Generá un DOCUMENTO FUNCIONAL de alta calidad, "
-    "optimizado para obtener un puntaje >= 90% según criterios de QA: claridad, completitud, "
-    "flujos principal/alternos, casos borde, reglas de negocio, datos de prueba ejemplo, "
-    "criterios de aceptación medibles, dependencias, supuestos, riesgos, alcance y fuera de alcance, "
-    "requisitos NO funcionales (seguridad, performance, observabilidad). "
-    "Devolvé SOLO un JSON válido con esta estructura (ejemplo de keys, sin texto extra):\n"
-    "{\n"
-    '  "Titulo": "string",\n'
-    '  "ResumenEjecutivo": "string",\n'
-    '  "Objetivos": ["string", "..."],\n'
-    '  "Alcance": ["in-scope 1", "in-scope 2"],\n'
-    '  "FueraDeAlcance": ["out 1", "out 2"],\n'
-    '  "Actores": ["Usuario", "Admin", "Integración X"],\n'
-    '  "HistoriasDeUsuario": [\n'
-    '    {"ID":"HU-1","Como":"<actor>","Quiero":"<objetivo>","Para":"<beneficio>", "CriteriosDeAceptacion":["..."]}\n'
-    "  ],\n"
-    '  "ReglasDeNegocio": ["regla 1", "regla 2"],\n'
-    '  "Flujos": {"Principal": ["paso 1", "paso 2"], "Alternativos": [["alt-1 paso 1","alt-1 paso 2"]]},\n'
-    '  "CasosBorde": ["borde 1", "borde 2"],\n'
-    '  "DatosDePrueba": ["ejemplo1=...", "ejemplo2=..."],\n'
-    '  "CriteriosDeAceptacionGlobales": ["medible 1", "medible 2"],\n'
-    '  "RequisitosNoFuncionales": ["seguridad ...", "performance ...", "observabilidad ..."],\n'
-    '  "Dependencias": ["sistema A", "API B"],\n'
-    '  "Integraciones": ["servicio X", "servicio Y"],\n'
-    '  "Supuestos": ["..."],\n'
-    '  "Riesgos": ["..."]\n'
-    "}\n"
-    "Buenas prácticas: evitar ambigüedades, usar lenguaje medible (NFR con umbrales)."
-)
-
 def _safe_json_loads(text: str) -> Dict[str, Any]:
     # intenta extraer el primer bloque JSON válido
     m = re.search(r"\{.*\}", text, flags=re.S)
@@ -61,7 +30,7 @@ def generate_functional_json(context: Dict[str, Any], feedback_snippets: Optiona
             ctx_lines.append(f"{k}: {v}")
     ctx = "\n".join(ctx_lines)
 
-    messages = build_messages(GEN_PROMPT, f"Contexto de negocio/alcance:\n{ctx}", feedback_snippets)
+    messages = build_messages("documento-funcional", f"Contexto de negocio/alcance:\n{ctx}", feedback_snippets)
     resp = complete(messages, temperature=0.1)
     data = _safe_json_loads(resp)
     return data or {

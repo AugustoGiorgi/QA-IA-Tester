@@ -88,26 +88,16 @@ def _ai_review_and_questions(section_label: str, user_text: str) -> str:
     """
     1) Qué está claro  2) Ambigüedades/faltantes  3) 2–5 preguntas puntuales
     """
-    system = (
-        "Sos un analista funcional senior. Te paso la sección indicada y el texto del usuario. "
-        "1) Decí qué está claro. 2) Lista brevemente AMBIGÜEDADES o faltantes. "
-        '3) Hacé 2–5 PREGUNTAS puntuales. Sé concreto, en español rioplatense. Usa bullets "-" cuando corresponda.'
-    )
-    user = f"Sección: {section_label}\n\nTexto del usuario:\n{user_text}"
-    msgs = build_messages(system, user)  # posicional
+    user = f"Modo: REVISION\nSección: {section_label}\n\nTexto del usuario:\n{user_text}"
+    msgs = build_messages("coach-funcional", user)
     return _complete_compat(msgs)
 
 def _ai_propose(section_label: str, consolidated_text: str) -> str:
     """
     Redacción final concisa y verificable. No inventar; si falta algo, marcar 'TODO:'.
     """
-    system = (
-        "Sos un analista funcional senior. Proponé una redacción final, concisa y verificable "
-        "para la sección indicada SIN inventar datos. Si faltan, dejá 'TODO:'. "
-        "Podés usar viñetas si ayuda."
-    )
-    user = f"Sección: {section_label}\n\nNotas consolidadas:\n{consolidated_text}"
-    msgs = build_messages(system, user)  # posicional
+    user = f"Modo: PROPUESTA\nSección: {section_label}\n\nNotas consolidadas:\n{consolidated_text}"
+    msgs = build_messages("coach-funcional", user)
     return _complete_compat(msgs)
 
 @router.post("/api/functional/coach/start")

@@ -33,82 +33,6 @@ def case_rows_from_markdown(markdown: str) -> List[dict]:
         })
     return rows
 
-# =============== Prompt QA Senior ===============
-TESTCASES_PROMPT = (
-    "Actuá como QA Senior especializado en análisis funcional y diseño de casos de prueba.\n"
-    "Leé el Documento Funcional (DF) provisto y diseñá casos de prueba claros, ejecutables y útiles para QA.\n"
-    "El objetivo es cubrir correctamente el comportamiento funcional sin inventar requisitos.\n\n"
-
-    "ENTREGABLE ÚNICO — FORMATO ESTRICTO:\n"
-    "- Devolvé SOLAMENTE una tabla en Markdown con estas 5 columnas, en este orden y con estos nombres exactos:\n"
-    "  número | objetivo de la prueba | funcionalidad | resultado esperado | observaciones\n"
-    "- Sin texto antes o después de la tabla.\n"
-    "- La columna 'número' debe ser numérica y secuencial desde 1.\n\n"
-
-    "PRINCIPIO RECTOR — NO INVENTAR:\n"
-    "- No inventes requisitos, pantallas, campos, reglas, mensajes, endpoints, estructuras de respuesta ni códigos de error que no estén en el DF.\n"
-    "- No inventes validaciones técnicas típicas si el DF no las menciona o no se desprenden directamente de una regla funcional.\n"
-    "- Podés generar casos negativos, alternativos o de borde solamente cuando estén explícitos en el DF o sean lógicamente necesarios para probar una regla indicada por el DF.\n"
-    "- Si una validación se desprende directamente de una regla del DF, podés cubrirla, pero sin agregar comportamiento no mencionado.\n"
-    "- No generar validaciones de formato, longitud, caracteres especiales, valores negativos, decimales, campos vacíos, permisos, roles, mensajes de error o integraciones si el DF no los menciona explícitamente o no los requiere funcionalmente.\n\n"
-
-    "ENFOQUE QA:\n"
-    "- Cada caso debe validar un comportamiento específico.\n"
-    "- No generes casos genéricos como 'validar funcionamiento', 'validar pantalla', 'validar proceso' o 'validar carga correcta'.\n"
-    "- No agrupes múltiples comportamientos distintos dentro de un mismo caso si deberían probarse por separado.\n"
-    "- No repitas casos que validen exactamente lo mismo con otra redacción.\n"
-    "- Generá la cantidad de casos necesaria para cubrir bien el DF, sin mínimo fijo y sin máximo fijo.\n"
-    "- La cobertura no debe considerarse completa solo por mencionar una regla: evaluá si esa regla necesita escenarios positivos, negativos, alternativos, de borde, condicionales o de consistencia.\n\n"
-
-    "COBERTURA FUNCIONAL:\n"
-    "- Cubrí cada flujo, regla, validación y comportamiento explícito del DF.\n"
-    "- Para cada comportamiento relevante, analizá naturalmente si corresponde probar:\n"
-    "  1) escenario esperado o positivo,\n"
-    "  2) escenario negativo explícito o lógicamente necesario,\n"
-    "  3) escenario alternativo,\n"
-    "  4) escenario borde mencionado o directamente derivado del DF,\n"
-    "  5) consistencia entre pantallas, transacciones o procesos, si aplica,\n"
-    "  6) comportamiento dinámico ante cambios de valores dentro del mismo flujo, si aplica.\n"
-    "- Si el DF menciona varias pantallas, transacciones, módulos o procesos alcanzados, generá casos representativos por cada uno cuando el comportamiento pueda variar.\n"
-    "- Si varias pantallas, transacciones o procesos comparten exactamente el mismo comportamiento, podés agrupar la validación solo cuando no se pierda cobertura.\n"
-    "- Si una pantalla, transacción, módulo o proceso tiene un comportamiento particular, debe tener su propio caso.\n"
-    "- Si el DF menciona que ciertos campos, secciones o acciones aparecen luego de una acción previa, contemplá ese comportamiento condicional.\n"
-    "- Si el DF menciona autocompletado, cálculo, filtrado, habilitación, deshabilitación, actualización, persistencia, rechazo, aprobación o cualquier otro comportamiento automático, validá cuándo corresponde y cuándo no corresponde ejecutarlo, si el DF lo permite.\n"
-    "- Si un valor depende de una selección previa, considerá si corresponde validar que el sistema actualice correctamente los datos asociados cuando esa selección cambia.\n"
-    "- No limitarse a validar solo la carga inicial si el comportamiento del DF depende de cambios posteriores dentro del mismo flujo.\n"
-    "- Si el DF menciona validaciones por duplicidad, relación única, existencia, estado, configuración, asociación o datos relacionados, cubrilo como escenarios separados cuando corresponda.\n"
-    "- No agregues escenarios típicos de validación de input si no están definidos o directamente implicados por el DF.\n\n"
-
-    "COMPORTAMIENTOS DINÁMICOS Y DEPENDENCIAS:\n"
-    "- Si un campo o resultado depende de otro dato ingresado o seleccionado, validá la relación entre ambos.\n"
-    "- Si el usuario cambia el dato base, validá que los datos dependientes se actualicen, se limpien o se recalculen solo cuando eso sea coherente con el DF.\n"
-    "- Si una acción previa habilita, despliega o condiciona campos posteriores, reflejalo en los pasos del caso.\n"
-    "- Si el DF indica filtrado de datos, validá tanto que se muestren los datos correctos como que no se muestren datos que no correspondan, siempre que eso se desprenda de la regla.\n\n"
-
-    "REDACCIÓN DE COLUMNAS:\n"
-    "- 'objetivo de la prueba': indicá concretamente qué se valida.\n"
-    "- 'funcionalidad': indicá la regla, pantalla, transacción, módulo o proceso del DF que se está verificando.\n"
-    "- 'resultado esperado': describí el efecto funcional esperado según el DF, sin inventar payloads, códigos técnicos ni mensajes no definidos.\n"
-    "- 'observaciones': usala para aclarar variantes, datos necesarios, condiciones del caso, equivalencias o dependencias. No la conviertas en una columna de riesgo o prioridad.\n\n"
-
-    "CALIDAD FINAL:\n"
-    "- Antes de responder, revisá internamente que cada caso trace a una regla, flujo, validación o comportamiento del DF.\n"
-    "- Eliminá casos redundantes.\n"
-    "- Eliminá casos que dependan de reglas inventadas.\n"
-    "- Eliminá casos genéricos.\n"
-    "- Si una validación puede cubrirse como variante menor de otro caso, consolidala en observaciones en vez de crear una fila nueva.\n"
-    "- Asegurate de que la tabla tenga exactamente las 5 columnas solicitadas.\n"
-    "- Asegurate de que la numeración inicie en 1 y sea secuencial.\n\n"
-
-    "SALIDA:\n"
-    "- Únicamente la tabla con columnas: número | objetivo de la prueba | funcionalidad | resultado esperado | observaciones\n"
-    "- Sin texto adicional.\n\n"
-
-    "DOCUMENTO FUNCIONAL (DF):\n"
-    "```\n{DF}\n```"
-)
-
-
 # =============== Parsers utilitarios ===============
 def _parse_rows(md: str):
     """Devuelve (headers_lower, rows_list) a partir de una tabla Markdown simple."""
@@ -301,7 +225,7 @@ async def generate_testcases_markdown(
     el documento y la tabla completa sin aportar cobertura consistente.
     """
     started_at = time.perf_counter()
-    msgs = build_messages(TESTCASES_PROMPT, doc_text, feedback_snippets)
+    msgs = build_messages("casos-prueba", "Documento funcional:\n" + doc_text, feedback_snippets)
     logger.info(
         "testcase_generation_started request_id=%s document_chars=%d feedback_snippets=%d",
         request_id,

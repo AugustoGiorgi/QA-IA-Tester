@@ -137,26 +137,13 @@ async def ask(payload: AskIn):
     recos_context = "\n".join(st.recommendations[:80]) or "—"
     strengths_context = "\n".join(st.strengths[:40]) or "—"
 
-    system = (
-        "Sos un experto en QA y documentación funcional. "
-        "Respondé en español rioplatense, concreto y accionable. "
-        "Si el usuario propone una opción, decí explícitamente si SÍ o NO y por qué, "
-        "y sugerí la redacción o ejemplo exacto que faltaría en el documento. "
-        "Evitá generalidades."
-    )
-
     user_prompt = (
         f"RECOMENDACIONES DETECTADAS (por sección):\n{recos_context}\n\n"
         f"PUNTOS FUERTES:\n{strengths_context}\n\n"
-        f"Pregunta del usuario: {q}\n\n"
-        "Reglas de respuesta:\n"
-        "- Si pide '¿a qué te referís?', explicá el gap concreto y mostrale 1–2 ejemplos textuales listos para pegar.\n"
-        "- Si sugiere una alternativa, evaluá SÍ o NO y justificá en 1–2 frases.\n"
-        "- Si hay varias secciones implicadas, nombralas entre corchetes (p. ej., [Riesgos]).\n"
-        "- Sé breve (3–6 líneas)."
+        f"Pregunta del usuario: {q}"
     )
 
-    msgs = build_messages(system, user_prompt, [])
+    msgs = build_messages("chat-calidad", user_prompt)
     try:
         if inspect.iscoroutinefunction(complete):
             answer = await complete(msgs)
