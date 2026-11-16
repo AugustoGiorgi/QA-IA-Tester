@@ -1,13 +1,25 @@
-# Skills de procesos de IA
+# Skills portables de QA
 
-Cada llamada a IA carga solo el `SKILL.md` de su proceso desde `services/skills.py`.
-Las instrucciones estables y el contrato de salida viven en ese archivo; el codigo
-envia por separado el documento, el historial y los datos variables. Para crear un
-proceso nuevo, agrega su carpeta, registrala en `SKILL_NAMES` y usa `build_messages`
-o `load_skill` en el punto de llamada. No insertes instrucciones estables en el
-mensaje del usuario.
+Cada carpeta se puede compartir por separado. Su `SKILL.md` explica cuando
+aplica, que necesita y que entrega. No requiere una base, un repositorio o un
+formato interno particular. El contexto del proyecto se aporta por separado.
 
-`load_skill` conserva el contenido en memoria durante la vida del proceso: un
-cambio al archivo requiere reiniciar el backend. Esto evita lecturas repetidas, no
-el costo de tokens de la API. El ahorro de tokens proviene de acortar instrucciones
-duplicadas y enviar solo la skill y el contexto necesarios en cada solicitud.
+En un asistente compatible, incorpora la carpeta como skill. En otro asistente,
+adjunta el `SKILL.md` elegido junto con los insumos y especifica el entregable.
+Por ejemplo: "Usa cucumber-gherkin con esta historia y estos criterios. Genera
+un feature sin glue code y enumera las dudas aparte".
+
+| Skills | Insumos tipicos |
+| --- | --- |
+| entendimiento, chat-documental, chat-calidad | Documento, pregunta o hallazgos de la revision |
+| documento-funcional, coach-funcional | Contexto de negocio, notas y aclaraciones |
+| casos-prueba, cucumber-gherkin | Requisitos, criterios y escenarios existentes |
+| playwright | Flujo UI, resultados esperados y evidencia tecnica disponible |
+| karate-framework | Contrato API, casos y convenciones del proyecto si existen |
+| sql-chat, sql-datos | Dialecto, metadatos del esquema y reglas de negocio |
+| evidencias | Captura y contexto opcional |
+| chat-proyectos | Pregunta y datos sobre proyectos o tareas |
+
+Adjunta solo el contexto necesario y no incluyas credenciales ni datos reales de
+clientes. Un borrador no implica que se haya ejecutado. Si falta una regla,
+selector o dato, la salida lo debe marcar en vez de inventarlo.

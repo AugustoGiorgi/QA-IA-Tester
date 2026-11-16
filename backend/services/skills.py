@@ -5,11 +5,18 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 
-SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+SKILLS_DIR = BACKEND_DIR / "skills"
+CONTRACTS_DIR = BACKEND_DIR / "skill_contracts"
 SKILL_NAMES = frozenset({
     "entendimiento", "casos-prueba", "documento-funcional", "playwright",
     "evidencias", "sql-chat", "sql-datos", "chat-documental",
     "coach-funcional", "chat-calidad", "chat-proyectos",
+    "cucumber-gherkin", "karate-framework",
+})
+APP_CONTRACT_SKILLS = frozenset({
+    "casos-prueba", "documento-funcional", "evidencias", "playwright",
+    "sql-chat", "sql-datos",
 })
 
 
@@ -17,9 +24,19 @@ SKILL_NAMES = frozenset({
 def load_skill(name: str) -> str:
     if name not in SKILL_NAMES:
         raise ValueError(f"Skill desconocida: {name}")
-    content = (SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8").strip()
+    raw = (SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8")
+    opening, _, rest = raw.partition("\n")
+    _, closing, body = rest.partition("\n---\n")
+    if opening != "---" or not closing:
+        raise ValueError(f"Skill sin frontmatter valido: {name}")
+    content = body.strip()
     if not content:
         raise ValueError(f"Skill vacia: {name}")
+    if name in APP_CONTRACT_SKILLS:
+        contract = (CONTRACTS_DIR / f"{name}.md").read_text(encoding="utf-8").strip()
+        if not contract:
+            raise ValueError(f"Contrato de skill vacio: {name}")
+        content += "\n\n## Requisitos de esta integracion (prevalecen sobre el formato por defecto)\n" + contract
     return content
 
 

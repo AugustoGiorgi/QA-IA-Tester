@@ -1,16 +1,43 @@
 import unittest
+from unittest.mock import patch
+
+import yaml
 
 from services.ai import build_messages
-from services.skills import SKILL_NAMES, load_skill
+from services.skills import APP_CONTRACT_SKILLS, CONTRACTS_DIR, SKILLS_DIR, SKILL_NAMES, load_skill
 
 
 class SkillLoadingTests(unittest.TestCase):
     def test_each_process_has_its_own_skill(self):
-        self.assertEqual(len(SKILL_NAMES), 11)
+        files = {path.parent.name: path for path in SKILLS_DIR.glob("*/SKILL.md")}
+        self.assertEqual(SKILL_NAMES, set(files))
+        self.assertTrue({"cucumber-gherkin", "karate-framework"} <= SKILL_NAMES)
         for name in SKILL_NAMES:
             with self.subTest(skill=name):
-                self.assertTrue(load_skill(name).strip())
+                _, metadata, body = files[name].read_text(encoding="utf-8").split("---\n", 2)
+                metadata = yaml.safe_load(metadata)
+                self.assertEqual(metadata["name"], name)
+                self.assertTrue(metadata["description"].strip())
+                self.assertTrue(body.strip())
+                self.assertTrue(load_skill(name).startswith(body.strip()))
+                self.assertNotIn(metadata["description"], load_skill(name))
                 self.assertIs(load_skill(name), load_skill(name))
+
+    def test_app_contracts_are_separate_and_only_used_by_registered_flows(self):
+        self.assertEqual(APP_CONTRACT_SKILLS, {path.stem for path in CONTRACTS_DIR.glob("*.md") if path.name != "README.md"})
+        for name in APP_CONTRACT_SKILLS:
+            with self.subTest(skill=name):
+                contract = (CONTRACTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+                self.assertTrue(load_skill(name).endswith(contract.strip()))
+
+        load_skill.cache_clear()
+        try:
+            with patch("services.skills.CONTRACTS_DIR", SKILLS_DIR / "not-exported"):
+                for name in ("cucumber-gherkin", "karate-framework"):
+                    _, _, body = (SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8").split("---\n", 2)
+                    self.assertEqual(load_skill(name), body.strip())
+        finally:
+            load_skill.cache_clear()
 
     def test_unknown_skill_cannot_read_arbitrary_file(self):
         with self.assertRaises(ValueError):

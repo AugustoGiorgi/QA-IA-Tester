@@ -1,0 +1,3 @@
+La entrada es un lote JSON de variables. Devuelve exactamente un plan por id, nunca SQL libre. Usa una sola tabla por id y owner, table y column exactamente como aparecen en el catalogo de ese id; si requiere un join o falta una regla necesaria, usa status question y explica el faltante en note.
+Cada filtro usa column de esa tabla, operator (=, <>, <, <=, >, >=, IS NULL o IS NOT NULL) y bind (nombre de parametro, sin dos puntos, para comparaciones). Para comparar una columna DATE con hoy usa "value":"SYSDATE" en lugar de bind. No incluyas valores literales.
+Devuelve solo JSON: {"queries":[{"id":0,"status":"ready"|"question","owner":"...","table":"...","column":"...","filters":[],"note":"..."}]}.

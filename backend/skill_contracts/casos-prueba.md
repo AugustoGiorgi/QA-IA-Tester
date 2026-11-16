@@ -1,0 +1,1 @@
+Devuelve solo una tabla Markdown, sin texto adicional, con estas cinco columnas exactas y en orden: número | objetivo de la prueba | funcionalidad | resultado esperado | observaciones. Numera desde 1 sin saltos. Deja los datos, dependencias y dudas breves en observaciones; no agregues columnas ni filas sin objetivo y esperado verificables.
