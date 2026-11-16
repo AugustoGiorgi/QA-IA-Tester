@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi import HTTPException
+from services.skills import load_skill
 from services.sql_assistant import (
     COLUMN_HEADERS,
     RELATION_HEADERS,
@@ -189,6 +190,7 @@ class SqlAssistantAsyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queries[0]["status"], "ready")
         self.assertIn("INSUDB.POLICY", queries[0]["sql"])
         self.assertNotIn("password", str(ai.call_args))
+        self.assertEqual(ai.call_args.args[0][0], {"role": "system", "content": load_skill("sql-datos")})
 
     async def test_direct_data_queries_never_show_ungrounded_sql(self):
         collections = {
@@ -284,8 +286,10 @@ class SqlAssistantAsyncTests(unittest.IsolatedAsyncioTestCase):
             KNOWLEDGE: FakeCollection(),
         }
         response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"status":"question","reply":"¿Qué significa vigente?","sql":"","assumptions":[],"knowledge":{"term":"póliza vigente","definition":"Estado activo"}}'))])
-        with patch("services.sql_assistant._db", return_value=FakeDatabase(collections)), patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", new=AsyncMock(return_value=response)):
-            await send_message(MessageIn(message="Vigente significa estado activo"), {"username": "shared"})
+        with patch("services.sql_assistant._db", return_value=FakeDatabase(collections)), patch("services.sql_assistant._schema_cache", None), patch("services.sql_assistant.chat_completion_async", new=AsyncMock(return_value=response)) as ai:
+            result = await send_message(MessageIn(message="Vigente significa estado activo"), {"username": "shared"})
+        self.assertEqual(result["message"]["status"], "question")
+        self.assertEqual(ai.call_args.args[0][0], {"role": "system", "content": load_skill("sql-chat")})
         self.assertEqual(collections[KNOWLEDGE].updates, [])
         self.assertTrue(any("messages" in update.get("$push", {}) for _, update, _ in collections[THREADS].updates))
 
