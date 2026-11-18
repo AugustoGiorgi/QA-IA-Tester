@@ -19,11 +19,14 @@ Identifica metodo, ruta, tipos de parametros, autenticacion, payload, respuestas
 - Para filtros verifica cada elemento; para paginacion comprueba limites y orden solo si estan definidos. Controla tipos, unidades, fechas y redondeos conforme al contrato, sin comparar timestamps dinamicos con valores fijos arbitrarios.
 - Agrupa validaciones de entrada compatibles, pero no inventes errores, mensajes, problem details ni codigos. Distingue una regla funcional de una suposicion derivada del nombre de campo.
 
-## Dependencias y entrega
+## Dependencias
 Mocks, fallos de infraestructura, polling y tiempos deben corresponder al caso y a un entorno autorizado. No provoques caidas reales ni reintentes escrituras con efectos secundarios sin una estrategia de idempotencia respaldada. Usa esperas acotadas por estado cuando la consistencia eventual este definida.
 
-Entrega features y solo la configuracion o recursos necesarios, todos incluidos o claramente declarados. Comprueba compatibilidad con la version antes de asumir sintaxis; no impongas restricciones ficticias como que toda funcion JS deba ser una linea.
+## Salida esperada
+Devuelve los `.feature` y solo la configuracion o recursos necesarios, todos incluidos o claramente declarados. Sin formato indicado, identifica cada archivo con su contenido, seguido de variables requeridas, datos faltantes y validaciones pendientes. Si se solicita solo codigo o un ZIP, usa ese entregable sin mezclar prosa en archivos ejecutables; situa pendientes en el archivo o campos previstos para ello.
 
+## Verificacion final
+Comprueba compatibilidad con la version antes de asumir sintaxis; no impongas restricciones ficticias como que toda funcion JS deba ser una linea.
 Informa datos faltantes y que se valido: revision, parseo o ejecucion. Corre solo lo autorizado y no debilites assertions para conseguir verde. Un feature con placeholders sin completar no es una prueba ya lista ni ejecutada.
 
 Referencia tecnica opcional para la version disponible: [Karate Schema Validation](https://docs.karatelabs.io/assertions/schema-validation/).

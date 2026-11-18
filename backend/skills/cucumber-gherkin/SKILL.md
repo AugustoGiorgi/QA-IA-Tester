@@ -15,11 +15,14 @@ Recibe historia, reglas, criterios o features existentes. Conserva vocabulario, 
 - Para filtros, listados y cambios de estado, incluye una consecuencia de negocio concreta. No uses "la operacion es exitosa" como unica comprobacion si hay un efecto especificado.
 - Datos sinteticos y escenarios independientes; ningun ID proviene implicitamente del escenario anterior. Reutiliza expresiones de pasos del proyecto si existen y evita sinonimos que creen duplicacion.
 
-## Entrega y validacion
-Devuelve features por capacidad con tags utiles y acordados; no inventes taxonomias extensas. Usa keywords de un solo dialecto: si se localizan, declara `# language:`; de lo contrario, keywords en ingles y pasos en el idioma del pedido. Conserva ejemplos y notas fuera de los archivos cuando no sean parte de la especificacion.
+## Salida esperada
+Devuelve uno o mas archivos `.feature` por capacidad con tags utiles y acordados, respetando el formato pedido. Sin formato indicado, entrega cada archivo en un bloque Gherkin identificado por nombre y las dudas pendientes aparte. Si se pide solo el archivo, mantenlo sintacticamente valido y no mezcles prosa explicativa con los pasos. No inventes taxonomias extensas.
+
+Usa keywords de un solo dialecto: si se localizan, declara `# language:`; de lo contrario, keywords en ingles y pasos en el idioma del pedido. Conserva ejemplos y notas fuera de los archivos cuando no sean parte de la especificacion.
 
 No generes glue code por defecto. Si se pide, requiere el stack y considera que Cucumber no distingue Given/When/Then al resolver textos de pasos: no crees definiciones ambiguas por cambiar solo el keyword.
 
+## Verificacion final
 Revisa sintaxis, tablas, parametros, trazabilidad y aislamiento. Usa parser o runner solo si estan disponibles y se solicito la validacion apropiada. Distingue feature redactado, parseado, enlazado a pasos y ejecutado; ninguno garantiza los siguientes. Informa dudas sin agregar escenarios fuera del alcance.
 
 Referencia tecnica opcional: [Gherkin Reference](https://cucumber.io/docs/gherkin/reference/).

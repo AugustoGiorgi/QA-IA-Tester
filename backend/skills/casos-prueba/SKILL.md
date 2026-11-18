@@ -18,7 +18,8 @@ Pregunta solo por una ambiguedad que impida definir el resultado. En modo de ent
 ## Revision de suites
 Conserva IDs, variantes y cobertura util. No elimines ni dividas filas de una suite proporcionada sin que el pedido lo permita; sugiere cambios por separado. Detecta duplicados por comportamiento, no solo por titulo. Prioriza por impacto y probabilidad conocidos; no presentes una prioridad inferida como oficial.
 
-## Entrega y control
-Usa el formato solicitado; si no hay, tabla con ID, origen, objetivo, precondiciones/datos, pasos, esperado y pendientes. Integra trazabilidad o dudas en los campos disponibles sin romper el esquema del consumidor.
+## Salida esperada
+Devuelve los casos en el formato solicitado. Sin formato indicado, usa una tabla con ID, origen, objetivo, precondiciones/datos, pasos, esperado y pendientes. Identifica los casos preparados y los bloqueados. Integra trazabilidad y dudas en los campos disponibles sin romper el esquema del consumidor ni agregar texto externo si se exige una salida estricta.
 
+## Verificacion final
 Antes de entregar verifica cobertura de cada regla disponible, diferencias entre variantes y coherencia paso-esperado. No declares cobertura total ni asignaciones de ejecucion si solo se diseno la suite. Distingue casos preparados de casos bloqueados; no afirmes que pasaron.

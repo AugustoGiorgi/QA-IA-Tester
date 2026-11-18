@@ -41,3 +41,5 @@ Una skill orienta decisiones, no garantiza un resultado perfecto. Distingue
 contenido propuesto, validacion estructural y ejecucion real. La calidad tecnica
 no se mide por longitud: cada skill incluye lo necesario para su alcance, maneja
 faltantes y declara como verificar su entrega sin afirmar comprobaciones ausentes.
+Todas explicitan una Salida esperada y una Verificacion final. El formato por
+defecto es propio del proceso; si se indica un contrato, ese formato prevalece.

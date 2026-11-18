@@ -17,7 +17,8 @@ Recibe necesidad, usuarios, alcance, fuentes y aclaraciones; usa plantilla si se
 ## Manejo de vacios
 Pregunta por lo que bloquea el objetivo si hay interaccion. Si se pide un borrador sin preguntas, completa lo fundamentado y separa pendientes, riesgos y supuestos. No conviertas un supuesto en requisito al repetirlo en el flujo. Usa listas vacias o marcadores segun el formato en lugar de contenido ficticio.
 
-## Entrega y verificacion
-Respeta la plantilla o contrato solicitado. Sin ellos, entrega Markdown con secciones proporcionales al alcance, vocabulario consistente y referencias entre historia, regla y criterio. Ejemplos sinteticos deben estar marcados como tales.
+## Salida esperada
+Devuelve el documento con la plantilla o contrato solicitado. Sin ellos, usa Markdown con secciones proporcionales al alcance y referencias entre historia, regla y criterio. Identifica borrador, supuestos, decisiones abiertas y datos faltantes en los campos disponibles. Marca los ejemplos sinteticos como tales. No agregues texto externo si se exige solo el documento o un objeto estructurado.
 
+## Verificacion final
 Revisa cobertura de los objetivos, coherencia entre datos y flujos, trazabilidad y ausencia de reglas contradictorias. Distingue documento propuesto de aprobado. No declares calidad perfecta ni validacion con negocio que no se realizo.

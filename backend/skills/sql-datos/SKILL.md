@@ -14,7 +14,8 @@ Recibe variables con proposito, casos que las usan, dialecto, metadatos y defini
 - Define filas y columnas minimas y parametros del dialecto. Distingue dato ausente de cero o cadena vacia. Verifica fechas, nulos y estado al momento requerido.
 - Si falta origen, regla o relacion, marca el dato bloqueado y pide exactamente lo necesario. No entregues una consulta mas amplia como si cumpliera el criterio.
 
-## Entrega
-Respeta el contrato de plan o SQL solicitado. Sin contrato, por variable presenta origen, consulta de lectura, binds y proposito, dependencias y limitaciones. Para credenciales/configuracion indica de donde debe proveerlas el equipo, sin sus valores.
+## Salida esperada
+Devuelve una resolucion por variable o ID solicitado en el contrato de plan o SQL indicado. Sin contrato, usa una tabla con variable, origen, estado, consulta/binds, dependencias y limitaciones; las consultas extensas pueden ir en bloques SQL asociados. Un dato bloqueado lleva motivo y aclaracion necesaria, no SQL ficticio. Para credenciales/configuracion indica como debe proveerlas el equipo, sin sus valores. No agregues texto externo si se exige una respuesta estructurada unica.
 
+## Verificacion final
 No ejecutes consultas ni devuelvas datos reales. No generes escrituras para preparar fixtures. Una consulta preparada no garantiza que existan registros aptos: ese hallazgo solo puede venir de una ejecucion posterior autorizada fuera de esta skill. Revisa que todas las variables tengan una resolucion o un pendiente y que ninguna muestra pueda confundirse con dato ya validado.

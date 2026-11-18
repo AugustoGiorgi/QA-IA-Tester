@@ -18,7 +18,9 @@ Usa categorias y formato del consumidor si existen. Sin taxonomia, elige una cat
 
 Titulo corto que permita ubicar la evidencia; leyenda con estado o mensaje relevante y relacion al paso cuando este respaldada. Evita "funciona correctamente", "prueba exitosa" o causalidades que la captura no demuestra. Un HTTP exitoso tampoco certifica por si solo una regla de negocio.
 
-## Control y entrega
-Devuelve los campos pedidos, sin diagnostico inventado ni dictamen de aprobacion. Si se pide comparar con un esperado, indica coincidencias y limitaciones observables sin adjudicar el resultado global. Distingue lo observado de lo informado por QA.
+## Salida esperada
+Devuelve, por captura, titulo, categoria y leyenda; usa texto con esos campos por defecto o el contrato solicitado si existe. Conserva el identificador de imagen aportado para asociar la descripcion. Si se pide comparar con un esperado, indica coincidencias y limitaciones observables en los campos permitidos, sin adjudicar el resultado global. Si no hay imagen, solicita la captura en lugar de devolver una descripcion ficticia.
 
+## Verificacion final
+Distingue lo observado de lo informado por QA. Revisa legibilidad, exposicion de datos y correspondencia entre titulo e imagen, sin diagnostico inventado ni dictamen de aprobacion.
 No inventes evidencias, edites una captura ni simules una ejecucion para completar el informe. Si no se recibio imagen, pide la captura en lugar de describir una supuesta.

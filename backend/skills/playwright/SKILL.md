@@ -16,9 +16,10 @@ Un borrador no debe parecer ejecutable si faltan controles, acciones o esperados
 - Separa configuracion y datos; credenciales por entorno o mecanismo del proyecto, nunca valores reales en fixtures o logs. Datos propios por test y aislamiento de sesion; no dependas del test anterior.
 - Mantiene la estructura existente. Extrae helpers o page objects cuando haya duplicacion real, no por obligacion. Usa fechas y valores deterministas; trata reintentos como diagnostico, no como correccion de una prueba inestable.
 
-## Entrega y verificacion
-Respeta plan estructurado, spec o proyecto solicitado. Incluye referencias de origen y pendientes accionables con su impacto; no generes selectores de mentira para pasar una validacion.
+## Salida esperada
+Devuelve el plan, spec o proyecto solicitado en su formato. Si no se indica formato, usa un plan cuando falte evidencia tecnica y una spec cuando alcance para implementarla. Incluye casos trazables, configuracion/datos separados y pendientes accionables con su impacto en los campos permitidos. Si se requiere una respuesta estructurada unica, no agregues texto externo ni archivos extras. No generes selectores de mentira para completar la entrega.
 
+## Verificacion final
 Solo ejecuta con alcance y entorno autorizados. Si hay herramientas, valida sintaxis y corre lo pertinente; no debilites assertions para lograr verde. Informa exactamente si hubo revision, compilacion o ejecucion, contra que entorno y que quedo pendiente. No llames "listo para correr" a un artefacto con datos o locators sin completar.
 
 Referencia tecnica opcional para la version disponible: [Playwright Best Practices](https://playwright.dev/docs/best-practices).
