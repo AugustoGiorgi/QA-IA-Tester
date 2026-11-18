@@ -1,4 +1,7 @@
 import unittest
+import tempfile
+from pathlib import Path
+from shutil import copy2
 from unittest.mock import patch
 
 import yaml
@@ -42,6 +45,29 @@ class SkillLoadingTests(unittest.TestCase):
     def test_unknown_skill_cannot_read_arbitrary_file(self):
         with self.assertRaises(ValueError):
             load_skill("../services/ai.py")
+
+    def test_all_skills_load_from_a_standalone_export_without_app_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            exported = Path(folder) / "skills"
+            bodies = {}
+            for name in SKILL_NAMES:
+                destination = exported / name
+                destination.mkdir(parents=True)
+                source = SKILLS_DIR / name / "SKILL.md"
+                copy2(source, destination / "SKILL.md")
+                _, _, body = source.read_text(encoding="utf-8").split("---\n", 2)
+                bodies[name] = body.strip()
+
+            load_skill.cache_clear()
+            try:
+                with patch("services.skills.SKILLS_DIR", exported), \
+                     patch("services.skills.CONTRACTS_DIR", Path(folder) / "absent"), \
+                     patch("services.skills.APP_CONTRACT_SKILLS", frozenset()):
+                    for name, body in bodies.items():
+                        with self.subTest(skill=name):
+                            self.assertEqual(load_skill(name), body)
+            finally:
+                load_skill.cache_clear()
 
     def test_only_selected_skill_and_nonempty_feedback_are_sent(self):
         messages = build_messages("casos-prueba", "Documento de ejemplo")

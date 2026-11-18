@@ -1,8 +1,23 @@
 ---
 name: documento-funcional
-description: Redacta un documento funcional completo y verificable a partir de una necesidad, notas de negocio o historias de usuario.
+description: Redacta o completa documentos funcionales verificables a partir de necesidades, notas y decisiones de negocio, sin inventar requisitos.
 ---
 
-Usa el contexto, los actores y los requisitos confirmados. Distingue alcance y exclusiones, flujos y alternativas, reglas, integraciones, dependencias, supuestos y riesgos. Incluye criterios observables para cada historia y a nivel global; considera bordes, ejemplos sinteticos y requisitos no funcionales relevantes sin inventar umbrales, obligaciones ni reglas.
+## Insumos y autoridad
+Recibe necesidad, usuarios, alcance, fuentes y aclaraciones; usa plantilla si se aporta. Distingue requisito confirmado, ejemplo ilustrativo, propuesta y supuesto. Si las fuentes contradicen una regla central, senala el conflicto antes de elegir. Una plantilla organiza el contenido, no autoriza a inventar secciones llenas.
 
-Marca por separado decisiones y datos pendientes. No conviertas ejemplos, retroalimentacion o supuestos en requisitos confirmados. Respeta la plantilla o formato solicitado. Sin plantilla, entrega un documento Markdown con secciones y referencias cruzadas entre historias, reglas y criterios cuando aporten claridad.
+## Elaboracion
+- Define problema, resultado deseado, objetivos, alcance y exclusiones. Diferencia comportamiento actual del propuesto y actores de sistemas relacionados.
+- Describe flujo principal con disparador, precondiciones, acciones, decisiones, resultado y estado final. Modela alternativas y fallos documentados sin una enumeracion automatica de errores tipicos.
+- Formula reglas comprobables: condiciones, acciones, excepciones, precedencias y limites conocidos. Define terminos ambiguos del dominio solo si hay evidencia.
+- Para datos identifica significado, origen, obligatoriedad y restricciones conocidas; distingue autocompletado, calculado y editable. No inventes tablas, endpoints ni datos personales de ejemplo.
+- Traza historias a reglas y criterios observables. Evita "funciona bien", "rapido" o "seguro" como criterios cerrados. Si falta una metrica o umbral, dejalo como decision pendiente.
+- Describe dependencias e integraciones al nivel respaldado, con responsabilidad y comportamiento ante fallos cuando se conozcan. Considera requisitos no funcionales relevantes sin imponer tecnologias ni niveles de servicio no acordados.
+
+## Manejo de vacios
+Pregunta por lo que bloquea el objetivo si hay interaccion. Si se pide un borrador sin preguntas, completa lo fundamentado y separa pendientes, riesgos y supuestos. No conviertas un supuesto en requisito al repetirlo en el flujo. Usa listas vacias o marcadores segun el formato en lugar de contenido ficticio.
+
+## Entrega y verificacion
+Respeta la plantilla o contrato solicitado. Sin ellos, entrega Markdown con secciones proporcionales al alcance, vocabulario consistente y referencias entre historia, regla y criterio. Ejemplos sinteticos deben estar marcados como tales.
+
+Revisa cobertura de los objetivos, coherencia entre datos y flujos, trazabilidad y ausencia de reglas contradictorias. Distingue documento propuesto de aprobado. No declares calidad perfecta ni validacion con negocio que no se realizo.
