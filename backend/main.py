@@ -26,6 +26,7 @@ from schemas import FeedbackOut, GenerateFunctionalIn
 from services.parsing import docx_to_text
 from services.testcases import case_rows_from_markdown, generate_testcases_markdown
 from services.ai import AIResponseError, MAX_FEEDBACK_SNIPPETS, build_messages, complete
+from services.skills import skill_revision
 from services.generator import generate_functional_json, functional_json_to_docx
 from services.project_chat import chat_proyectos
 from services.files import safe_filename, safe_stem, save_upload
@@ -128,7 +129,11 @@ def get_recent_feedback_snippets(db: Session, limit: int = MAX_FEEDBACK_SNIPPETS
 # === Health ===
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "revision": os.getenv("RENDER_GIT_COMMIT", "local"),
+        "skills_revision": skill_revision(),
+    }
 
 # === 1) ENTENDIMIENTO ===
 @app.post("/api/explain", response_class=PlainTextResponse)

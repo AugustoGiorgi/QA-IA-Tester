@@ -7,10 +7,25 @@ from unittest.mock import patch
 import yaml
 
 from services.ai import build_messages
-from services.skills import APP_CONTRACT_SKILLS, CONTRACTS_DIR, SKILLS_DIR, SKILL_NAMES, load_skill
+from services.skills import APP_CONTRACT_SKILLS, CONTRACTS_DIR, SKILLS_DIR, SKILL_NAMES, load_skill, skill_revision
 
 
 class SkillLoadingTests(unittest.TestCase):
+    def test_revision_changes_when_an_effective_prompt_changes(self):
+        skill_revision.cache_clear()
+        try:
+            with patch("services.skills.load_skill", side_effect=lambda name: name) as loader:
+                original = skill_revision()
+                self.assertEqual(len(original), 64)
+                self.assertEqual(loader.call_count, len(SKILL_NAMES))
+                self.assertEqual(skill_revision(), original)
+                self.assertEqual(loader.call_count, len(SKILL_NAMES))
+            skill_revision.cache_clear()
+            with patch("services.skills.load_skill", side_effect=lambda name: name + " updated"):
+                self.assertNotEqual(skill_revision(), original)
+        finally:
+            skill_revision.cache_clear()
+
     def test_each_process_has_its_own_skill(self):
         files = {path.parent.name: path for path in SKILLS_DIR.glob("*/SKILL.md")}
         self.assertEqual(SKILL_NAMES, set(files))

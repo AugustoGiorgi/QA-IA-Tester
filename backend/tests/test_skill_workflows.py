@@ -21,7 +21,7 @@ from PIL import Image
 
 from main import app
 from services import ai, evidence_generator, routes_chat
-from services.skills import load_skill
+from services.skills import load_skill, skill_revision
 
 
 SOURCE = "Al guardar una reserva valida, el sistema confirma la reserva y muestra su identificador."
@@ -65,6 +65,14 @@ class SkillWorkflowTests(unittest.TestCase):
 
     def assert_ok(self, response):
         self.assertEqual(response.status_code, 200, response.text[:300] if response.status_code != 200 else "")
+
+    def test_health_reports_the_deployed_prompt_fingerprint_and_commit(self):
+        with patch.dict(os.environ, {"RENDER_GIT_COMMIT": "test-commit"}):
+            result = self.client.get("/api/health")
+        self.assert_ok(result)
+        self.assertEqual(result.json(), {
+            "status": "ok", "revision": "test-commit", "skills_revision": skill_revision(),
+        })
 
     def test_active_screens_and_modules_are_served_without_login(self):
         for page, script in {

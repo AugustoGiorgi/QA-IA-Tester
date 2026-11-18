@@ -1,6 +1,7 @@
 """Load the instruction set for exactly one AI-backed workflow."""
 
 from functools import lru_cache
+from hashlib import sha256
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -38,6 +39,16 @@ def load_skill(name: str) -> str:
             raise ValueError(f"Contrato de skill vacio: {name}")
         content += "\n\n## Requisitos de esta integracion (prevalecen sobre el formato por defecto)\n" + contract
     return content
+
+
+@lru_cache(maxsize=1)
+def skill_revision() -> str:
+    """Fingerprint the effective prompts, including the app output contracts."""
+    digest = sha256()
+    for name in sorted(SKILL_NAMES):
+        digest.update(name.encode("utf-8") + b"\0")
+        digest.update(load_skill(name).encode("utf-8") + b"\0")
+    return digest.hexdigest()
 
 
 def skill_messages(name: str, context: str, feedback: Optional[List[str]] = None) -> List[Dict[str, str]]:
